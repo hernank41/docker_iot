@@ -2,8 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get -y update
-RUN apt-get install python3-dev default-libmysqlclient-dev build-essential -y
+RUN apt-get -y update && \
+    apt-get install python3-dev default-libmysqlclient-dev build-essential -y && \
+    rm -rf /var/lib/apt/lists/*
 
 ENV TZ="America/Argentina/Buenos_Aires"
 
