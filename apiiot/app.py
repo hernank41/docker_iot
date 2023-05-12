@@ -10,7 +10,7 @@ logging.basicConfig(format='%(asctime)s - apiiot - %(levelname)s:%(message)s', l
 
 app = FastAPI(root_path="/api")
 url_object = URL.create(
-    "mysql+aiomysql",
+    "mysql+asyncmy",
     username=os.environ["MARIADB_USER"],
     password=os.environ["MARIADB_USER_PASS"],
     host=os.environ["MARIADB_SERVER"],
