@@ -71,7 +71,6 @@
     .then(data => {
       const temperatura = data.temperatura;
       document.getElementById('temperatura').innerHTML = temperatura.toFixed(2).replace(".",",").replace(/\d(?=(\d{3})+\,)/g, '$&.') + ' °C';
-      const temp_int = data.temp_int;
     })
   }
   document.addEventListener('DOMContentLoaded',adquirir());
