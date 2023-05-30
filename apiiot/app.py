@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
+from fastapi.encoders import jsonable_encoder
 
 logging.basicConfig(format='%(asctime)s - apiiot - %(levelname)s:%(message)s', level=logging.INFO, datefmt='%d/%m/%Y %H:%M:%S %z')
 
@@ -36,6 +37,5 @@ async def ultima():
         columnas=[c.name for c in tabla.columns]
         ultimos_zip=zip(columnas,ultimos)
         logging.info(ultimos)
-        await session.commit()
-    return ultimos_zip
+    return jsonable_encoder(ultimos_zip)
     

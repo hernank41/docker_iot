@@ -20,6 +20,7 @@ services:
     environment:
       - PMA_HOST=mariadb
       - PMA_ABSOLUTE_URI=https://${DOMINIO}:${PUERTO}/phpmyadmin/
+      - UPLOAD_LIMIT=30M
     ports:
       - 8080:80
     depends_on:
@@ -96,7 +97,7 @@ services:
     volumes:
       - ~/docker/swag:/config
     ports:
-      - ${PUERTO}:443
+      - ${PUERTO}:443/tcp
       - 80:80
     restart: unless-stopped
   telegrambot:
@@ -142,6 +143,39 @@ services:
     restart: unless-stopped
     depends_on:
       - mariadb
+  cheques:
+    image: cheques
+    build:
+      context: ./cheques
+    container_name: cheques
+    volumes:
+      - ~/docker/cheques/app:/app/tmp
+    restart: unless-stopped
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Argentina/Buenos_Aires
+      - SERVERURL=iotunam.duckdns.org
+      - SERVERPORT=10000
+      - PEERS=iotunam,milton
+      - PEERDNS=auto
+      - INTERNAL_SUBNET=10.13.13.0
+      - ALLOWEDIPS=0.0.0.0/0
+      - PERSISTENTKEEPALIVE_PEERS=
+      - LOG_CONFS=true
+    volumes:
+      - ~/docker/wireguard:/config
+    ports:
+      - 10000:51820/udp
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
 volumes:
   portainer_data:
   
