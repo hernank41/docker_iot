@@ -53,4 +53,29 @@
     </table>
   </div>
 </div>
+<div class="row">
+  <div class="col-sm-4">
+    <div class="card text-white bg-primary mb-3 m-5" style="max-width: 12rem;">
+      <div class="card-header">Temperatura Ambiente</div>
+      <div class="card-body mt-3">
+        <h3 class="card-title position-absolute bottom-0 start-50 translate-middle-x text-nowrap" id="temperatura"></h3>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function adquirir() {
+    fetch('https://iotunam.duckdns.org:10000/api/ultimos')
+    .then(response => response.json())
+    .then(data => {
+      const temperatura = data.temperatura;
+      document.getElementById('temperatura').innerHTML = temperatura.toFixed(2).replace(".",",").replace(/\d(?=(\d{3})+\,)/g, '$&.') + ' °C';
+      const temp_int = data.temp_int;
+    })
+  }
+  document.addEventListener('DOMContentLoaded',adquirir());
+  setInterval(adquirir,180000)
+</script>
+
 {% endblock %}
