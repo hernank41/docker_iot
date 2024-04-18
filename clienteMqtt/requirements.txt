@@ -1,4 +1,10 @@
+<<<<<<< HEAD
 paho-mqtt==1.6.1
 asyncio-mqtt==0.16.1
 certifi==2022.12.7
 environs==9.5.0
+=======
+aiomqtt==2.0.1
+certifi==2024.2.2
+environs==11.0.0
+>>>>>>> 21464c32c93930074697ea1ff1c1bd890785a45b
