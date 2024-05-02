@@ -44,4 +44,8 @@ async def main():
             task2 = Grupo_1.create_task(publicar())
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Interrupcion")
+        sys.exit(0)

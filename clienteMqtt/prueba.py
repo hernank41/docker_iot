@@ -25,4 +25,8 @@ async def main():
 contador1 = contador()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Interrupcion")
+        sys.exit(0)
