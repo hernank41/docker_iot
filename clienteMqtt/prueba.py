@@ -18,11 +18,11 @@ async def contar():
         await asyncio.sleep(3)
 
 async def main():
-
     async with asyncio.TaskGroup() as Grupo_1:
         task1 = Grupo_1.create_task((contar()))
         task2 = Grupo_1.create_task(publicar())
 
 contador1 = contador()
+
 if __name__ == "__main__":
     asyncio.run(main())
