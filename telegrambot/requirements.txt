@@ -1,7 +1,2 @@
-<<<<<<< HEAD
 python-telegram-bot==20.1
 aiomysql==0.1.1
-=======
-python-telegram-bot==21.2
-aiomysql==0.2.0
->>>>>>> 674bf9132d142496bf7218e01b801da9468b2de8
