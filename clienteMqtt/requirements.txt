@@ -1,3 +1,10 @@
+<<<<<<< HEAD
 asyncio-mqtt==0.16.1
 certifi==2022.12.7
 aiomysql==0.1.1
+=======
+aiomqtt==2.0.1
+certifi==2024.2.2
+environs==11.0.0
+aiomysql==0.2.0
+>>>>>>> 40d7c67c0ddf69954fadedb5fd229a22d10346a9
