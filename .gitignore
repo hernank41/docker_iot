@@ -139,3 +139,7 @@ swag/
 grafana/
 mosquitto/
 wireguard/
+<<<<<<< HEAD
+=======
+mariadb/
+>>>>>>> 674bf9132d142496bf7218e01b801da9468b2de8
