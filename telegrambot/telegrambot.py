@@ -1,14 +1,7 @@
-<<<<<<< HEAD
 import logging, os, aiomysql, traceback, asyncio, locale
 import matplotlib.pyplot as plt
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
-=======
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
-import logging, os, asyncio, aiomysql, traceback, locale
-import matplotlib.pyplot as plt
->>>>>>> 0a2284b9291a9de08687c1b3f35ad806e392dfa0
 from io import BytesIO
 
 token=os.environ["TB_TOKEN"]
@@ -27,10 +20,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         apellido=""
     kb = [["temperatura"],["humedad"],["gráfico temperatura"],["gráfico humedad"]]
     await context.bot.send_message(update.message.chat.id, text="Bienvenido al Bot "+ nombre + " " + apellido,reply_markup=ReplyKeyboardMarkup(kb))
-<<<<<<< HEAD
     # await update.message.reply_text("Bienvenido al Bot "+ nombre + " " + apellido) # también funciona
-=======
->>>>>>> 0a2284b9291a9de08687c1b3f35ad806e392dfa0
 
 async def acercade(update: Update, context):
     await context.bot.send_message(update.message.chat.id, text="Este bot fue creado para el curso de IoT FIO")
@@ -38,7 +28,7 @@ async def acercade(update: Update, context):
 async def kill(update: Update, context):
     logging.info(context.args)
     if context.args and context.args[0] == '@e':
-        await context.bot.send_animation(update.message.chat.id, "CgACAgEAAxkBAAOPZkuctzsWZVlDSNoP9PavSZmH5poAAmUCAALrx0lEVKaX7K-68Ns1BA")
+        await context.bot.send_animation(update.message.chat.id, "CgACAgQAAxkBAAMRZk-SS3Frzijvi_gVgHxe0plv3AUAAq4EAAJYom1S72dC_CPRrwM1BA")
         await asyncio.sleep(6)
         await context.bot.send_message(update.message.chat.id, text="¡¡¡Ahora estan todos muertos!!!")
     else:
