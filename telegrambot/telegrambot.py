@@ -1,10 +1,11 @@
 import logging, os, aiomysql, traceback, asyncio, locale
 import matplotlib.pyplot as plt
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackContext
 from io import BytesIO
 
-import paho.mqtt.client as mqtt
+import ssl, certifi, json, traceback
+import aiomqtt
 
 token=os.environ["TB_TOKEN"]
 
@@ -20,9 +21,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         apellido=update.message.from_user.last_name
     else:
         apellido=""
-    kb = [["temperatura"],["humedad"],["gráfico temperatura"],["gráfico humedad"]]
+    kb = [["Ultimos valores"],["Gráfico"],["Setear parametros"]]
+    #kb = [["temperatura"],["humedad"],["gráfico temperatura"],["gráfico humedad"]]
     await context.bot.send_message(update.message.chat.id, text="Bienvenido al Bot "+ nombre + " " + apellido,reply_markup=ReplyKeyboardMarkup(kb))
     # await update.message.reply_text("Bienvenido al Bot "+ nombre + " " + apellido) # también funciona
+
+
+async def ultimos_valores(update: Update, context: CallbackContext):
+    kb = [["temperatura"],["humedad"],["Volver"]]
+    await context.bot.send_message(update.message.chat.id, text="Here's the updated keyboard.", reply_markup=ReplyKeyboardMarkup(kb))
+
+async def volver(update: Update, context: CallbackContext):
+    kb = [["Ultimos valores"],["Gráfico"],["Setear parametros"]]
+    await context.bot.send_message(update.message.chat.id, text="Here's the updated keyboard.", reply_markup=ReplyKeyboardMarkup(kb))
+
+    
+async def mostrar_graficos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = [["gráfico temperatura"],["gráfico humedad"]]
+    await context.bot.send_message(reply_markup=ReplyKeyboardMarkup(kb))
+
+async def setear_parametros(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = [["setear"],["volver"]]
+    await context.bot.send_message(reply_markup=ReplyKeyboardMarkup(kb))
 
 async def acercade(update: Update, context):
     await context.bot.send_message(update.message.chat.id, text="Este bot fue creado para el curso de IoT FIO")
@@ -92,13 +112,49 @@ async def medicion(update: Update, context):
     conn.close()
 
 async def setear(update: Update, context):
+    tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    tls_context.verify_mode = ssl.CERT_REQUIRED
+    tls_context.check_hostname = True
+    tls_context.load_default_certs()
+    async with aiomqtt.Client(
+        os.environ["SERVIDOR"],
+        username=os.environ["MQTT_USR"],
+        password=os.environ["MQTT_PASS"],
+        port=int(os.environ["PUERTO_MQTTS"]),
+        tls_context=tls_context,
+    ) as client:
+        mensaje = update.message.text
+        try:
+            words = mensaje.split()
+            topico = words[0]
+            parametro = words[1]
+        
+            logging.info(mensaje)
+            if(topico == "setpoint"):
+                try:
+                    parametro = float(parametro)
+                    await client.publish(topic="iot/2024/24dcc399d76c/" + topico, payload=parametro , qos=1)
+                    await context.bot.send_message(update.message.chat.id, text="El setpoint se seteo en {}".format(parametro))
+                except ValueError:
+                    logging.info("Parametro incorrecto")
+                    await context.bot.send_message(update.message.chat.id, text="Parametro incorrecto")
+            else:
+                logging.info("Formato incorrecto")
+                await context.bot.send_message(update.message.chat.id, text="Formato incorrecto")
+        except IndexError:
+            logging.info("Formato incorrecto")
+            await context.bot.send_message(update.message.chat.id, text="Formato incorrecto")
+        except UnboundLocalError:
+            logging.info("Formato incorrecto")
+            await context.bot.send_message(update.message.chat.id, text="Formato incorrecto")
+async def setear2(update: Update, context):
     logging.info(update.message.text)
     await context.bot.send_message(update.message.chat.id,
                 text="Setpoint")
     client=mqtt.Client()
     client.tls_set()
     client.username_pw_set(username="kisiel", password="41995095")
-    client.subscribe("iot/2024/24dcc399d76c")
+    client.subscribe("iot/2024/24dcc399d76c/setpoint ")
     client.publish("iot/2024/24dcc399d76c", "setpoint")
 
 async def graficos(update: Update, context):
@@ -133,11 +189,14 @@ def main():
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('acercade', acercade))
     application.add_handler(CommandHandler('kill', kill))
-    application.add_handler(MessageHandler(filters.Regex("setpoint$"), setear))
+    application.add_handler(MessageHandler(filters.Regex("Ultimos valores$"), ultimos_valores))
+    application.add_handler(MessageHandler(filters.Regex("Volver$"), volver))
+    application.add_handler(MessageHandler(filters.Regex("Gráfico$"), mostrar_graficos))
+    application.add_handler(MessageHandler(filters.Regex("Setear parametros$"), setear_parametros))
+    application.add_handler(MessageHandler(filters.Regex("*.setear.*$"), setear))
     application.add_handler(MessageHandler(filters.Regex("^(temperatura|humedad)$"), medicion))
     application.add_handler(MessageHandler(filters.Regex("^(gráfico temperatura|gráfico humedad)$"), graficos))
     application.run_polling()
-
 '''
 # Define configuration
 config['ssl'] = True
