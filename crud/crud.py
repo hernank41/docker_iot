@@ -88,6 +88,15 @@ def index():
     cur.close()
     return render_template('index.html', contactos = datos)
 
+@app.route('/Negro')
+@require_login
+def negro():
+    cur = mysql.connection.cursor()
+    cur.execute('SELECT * FROM contactos')
+    datos = cur.fetchall()
+    cur.close()
+    return render_template('index2.html', contactos = datos)
+
 @app.route('/add_contact', methods=['POST'])
 @require_login
 def add_contact():
@@ -123,6 +132,7 @@ def conseguir_contacto(id):
     datos = cur.fetchone()
     logging.info(datos)
     return render_template('editar-contacto.html', contacto = datos)
+
 
 @app.route('/actualizar/<id>', methods=['POST'])
 @require_login
