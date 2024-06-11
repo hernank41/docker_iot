@@ -37,7 +37,7 @@ async def volver(update: Update, context: CallbackContext):
 
     
 async def mostrar_graficos(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = [["gráfico temperatura"],["gráfico humedad"]]
+    kb = [["gráfico temperatura"],["gráfico humedad"],["Volver"]]
     await context.bot.send_message(reply_markup=ReplyKeyboardMarkup(kb))
 
 async def setear_parametros(update: Update, context: ContextTypes.DEFAULT_TYPE):
