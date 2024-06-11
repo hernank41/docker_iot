@@ -86,16 +86,15 @@ def index():
     cur.execute('SELECT * FROM contactos')
     datos = cur.fetchall()
     cur.close()
-    return render_template('index.html', contactos = datos)
+    theme = session.get('theme', 'cerulean')
+    return render_template('index.html', contactos = datos,theme=theme)
 
-@app.route('/Negro')
-@require_login
-def negro():
-    cur = mysql.connection.cursor()
-    cur.execute('SELECT * FROM contactos')
-    datos = cur.fetchall()
-    cur.close()
-    return render_template('index2.html', contactos = datos)
+@app.route('/cambiar_tema')
+def cambiar_tema():
+    tema_actual = session.get('theme', 'cerulean')
+    nuevo_tema = 'darkly' if tema_actual == 'cerulean' else 'cerulean'
+    session['theme'] = nuevo_tema
+    return redirect(url_for('index'))
 
 @app.route('/add_contact', methods=['POST'])
 @require_login
