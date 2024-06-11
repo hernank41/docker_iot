@@ -118,9 +118,9 @@ services:
       context: ./crud
     container_name: crud
     environment:
-      - MYSQL_USER=${CRUD_USER}
+      - MYSQL_USER=${CRUD_USER2}
       - MYSQL_PASSWORD=${CRUD_PASS}
-      - MYSQL_DB=${CRUD_DB}
+      - MYSQL_DB=${CRUD_DB2}
       - MYSQL_HOST=${MARIADB_SERVER}
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
     ports:

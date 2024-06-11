@@ -1,10 +1,33 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_mysqldb import MySQL
-import os, logging
+import logging, os, aiomysql, traceback, asyncio, locale
 from functools import wraps
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
+
+import ssl, certifi, json, traceback
+import aiomqtt
+'''--------------------------------
+async def setear(update: Update, context):
+    tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    tls_context.verify_mode = ssl.CERT_REQUIRED
+    tls_context.check_hostname = True
+    tls_context.load_default_certs()
+    async with aiomqtt.Client(
+        os.environ["SERVIDOR"],
+        username=os.environ["MQTT_USR"],
+        password=os.environ["MQTT_PASS"],
+        port=int(os.environ["PUERTO_MQTTS"]),
+        tls_context=tls_context,
+    ) as client:
+        mensaje = update.message.text
+        try:
+            parametro = float(parametro)
+            await client.publish(topic="iot/2024/24dcc399d76c/" + topico, payload=parametro , qos=1)
+            await context.bot.send_message(update.message.chat.id, text="El setpoint se seteo en {}".format(parametro))
+-------------------------------
+'''
 logging.basicConfig(format='%(asctime)s - CRUD - %(levelname)s - %(message)s', level=logging.INFO)
 
 app = Flask(__name__)
@@ -83,11 +106,12 @@ def login():
 @require_login
 def index():
     cur = mysql.connection.cursor()
-    cur.execute('SELECT * FROM contactos')
+    cur.execute('SELECT * FROM nodos')
     datos = cur.fetchall()
     cur.close()
     theme = session.get('theme', 'cerulean')
-    return render_template('index.html', contactos = datos,theme=theme)
+    logging.info(datos)
+    return render_template('index.html', nodos = datos,theme=theme)
 
 @app.route('/cambiar_tema')
 def cambiar_tema():
@@ -96,56 +120,12 @@ def cambiar_tema():
     session['theme'] = nuevo_tema
     return redirect(url_for('index'))
 
-@app.route('/add_contact', methods=['POST'])
+@app.route('/add_nodo', methods=['GET'])
 @require_login
-def add_contact():
-    if request.method == 'POST':
-        nombre = request.form['nombre']
-        tel = request.form['tel']
-        email = request.form['email']
-        cur = mysql.connection.cursor()
-        cur.execute("INSERT INTO contactos (nombre, tel, email) VALUES (%s,%s,%s)"
-                    , (nombre, tel, email))
-        if mysql.connection.affected_rows():
-            flash('Se agregó un contacto')  # usa sesión
-            logging.info("se agregó un contacto")
-            mysql.connection.commit()
-    return redirect(url_for('index'))
-
-@app.route('/borrar/<string:id>', methods = ['GET'])
-@require_login
-def borrar_contacto(id):
-    cur = mysql.connection.cursor()
-    cur.execute('DELETE FROM contactos WHERE id = {0}'.format(id))
-    if mysql.connection.affected_rows():
-        flash('Se eliminó un contacto')  # usa sesión
-        logging.info("se eliminó un contacto")
-        mysql.connection.commit()
-    return redirect(url_for('index'))
-
-@app.route('/editar/<id>', methods = ['GET'])
-@require_login
-def conseguir_contacto(id):
-    cur = mysql.connection.cursor()
-    cur.execute('SELECT * FROM contactos WHERE id = %s', (id,))
-    datos = cur.fetchone()
-    logging.info(datos)
-    return render_template('editar-contacto.html', contacto = datos)
-
-
-@app.route('/actualizar/<id>', methods=['POST'])
-@require_login
-def actualizar_contacto(id):
-    if request.method == 'POST':
-        nombre = request.form['nombre']
-        tel = request.form['tel']
-        email = request.form['email']
-        cur = mysql.connection.cursor()
-        cur.execute("UPDATE contactos SET nombre=%s, tel=%s, email=%s WHERE id=%s", (nombre, tel, email, id))
-    if mysql.connection.affected_rows():
-        flash('Se actualizó un contacto')  # usa sesión
-        logging.info("se actualizó un contacto")
-        mysql.connection.commit()
+def add_nodo():
+    selected_id = request.form.get('id')
+    logging.info(selected_id)
+    flash(f'You selected: {selected_id}', 'success')
     return redirect(url_for('index'))
 
 @app.route("/logout")
