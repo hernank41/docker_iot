@@ -22,13 +22,15 @@ app.config["MYSQL_USER"] = os.environ["MYSQL_USER"]
 app.config["MYSQL_PASSWORD"] = os.environ["MYSQL_PASSWORD"]
 app.config["MYSQL_DB"] = os.environ["MYSQL_DB"]
 app.config["MYSQL_HOST"] = os.environ["MYSQL_HOST"]
-app.config['PERMANENT_SESSION_LIFETIME']=180
+app.config['PERMANENT_SESSION_LIFETIME']=1800
 mysql = MySQL(app)
 
 tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 tls_context.verify_mode = ssl.CERT_REQUIRED
 tls_context.check_hostname = True
 tls_context.load_default_certs()
+
+nodo = ''
 
 # rutas
 
@@ -109,6 +111,7 @@ def cambiar_tema():
 @app.route('/add_nodo', methods=['GET'])
 @require_login
 def add_nodo():
+    global nodo
     nodo = request.args.get('id')
     logging.info(f'Selected ID: {nodo}')  # Log the selected ID
 
@@ -122,6 +125,8 @@ def add_nodo():
 def destello():
     logging.info('Destello')  # Log the selected ID
     flash('Destello')
+    global nodo
+
     async def destello_mqtt():
         async with aiomqtt.Client(
             os.environ["SERVIDOR"],
@@ -139,8 +144,10 @@ def destello():
 @require_login
 def setpoint():
     setpoint = request.args.get('setpoint')
-    logging.info(f'Setpoint: {selected_id}')  # Log the selected ID
-    flash(f'Setpoint: {selected_id}')
+    logging.info(f'Setpoint: {setpoint}')  # Log the selected ID
+    flash(f'Setpoint: {setpoint}')
+
+    global nodo
     async def setpoint_mqtt():
         async with aiomqtt.Client(
             os.environ["SERVIDOR"],
