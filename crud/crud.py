@@ -8,26 +8,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import ssl, certifi, json, traceback
 import aiomqtt
-'''--------------------------------
-async def setear(update: Update, context):
-    tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    tls_context.verify_mode = ssl.CERT_REQUIRED
-    tls_context.check_hostname = True
-    tls_context.load_default_certs()
-    async with aiomqtt.Client(
-        os.environ["SERVIDOR"],
-        username=os.environ["MQTT_USR"],
-        password=os.environ["MQTT_PASS"],
-        port=int(os.environ["PUERTO_MQTTS"]),
-        tls_context=tls_context,
-    ) as client:
-        mensaje = update.message.text
-        try:
-            parametro = float(parametro)
-            await client.publish(topic="iot/2024/24dcc399d76c/" + topico, payload=parametro , qos=1)
-            await context.bot.send_message(update.message.chat.id, text="El setpoint se seteo en {}".format(parametro))
--------------------------------
-'''
+
 logging.basicConfig(format='%(asctime)s - CRUD - %(levelname)s - %(message)s', level=logging.INFO)
 
 app = Flask(__name__)
@@ -43,6 +24,11 @@ app.config["MYSQL_DB"] = os.environ["MYSQL_DB"]
 app.config["MYSQL_HOST"] = os.environ["MYSQL_HOST"]
 app.config['PERMANENT_SESSION_LIFETIME']=180
 mysql = MySQL(app)
+
+tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+tls_context.verify_mode = ssl.CERT_REQUIRED
+tls_context.check_hostname = True
+tls_context.load_default_certs()
 
 # rutas
 
@@ -123,9 +109,54 @@ def cambiar_tema():
 @app.route('/add_nodo', methods=['GET'])
 @require_login
 def add_nodo():
-    selected_id = request.form.get('id')
-    logging.info(selected_id)
-    flash(f'You selected: {selected_id}', 'success')
+    nodo = request.args.get('id')
+    logging.info(f'Selected ID: {nodo}')  # Log the selected ID
+
+    if nodo is not None:
+        flash(f'You selected: {nodo}')
+        return render_template('panel.html',theme='cerulean')
+
+
+@app.route('/destello', methods=['GET'])
+@require_login
+def destello():
+    logging.info('Destello')  # Log the selected ID
+    flash('Destello')
+    async def destello_mqtt():
+        async with aiomqtt.Client(
+            os.environ["SERVIDOR"],
+            username=os.environ["MQTT_USR"],
+            password=os.environ["MQTT_PASS"],
+            port=int(os.environ["PUERTO_MQTTS"]),
+            tls_context=tls_context,
+        ) as client:
+            topic = nodo + '/Destello'
+            await client.publish(topic=topic, payload=1, qos=1)
+    asyncio.run(destello_mqtt())
+    return render_template('panel.html',theme='cerulean')
+
+@app.route('/setpoint', methods=['GET'])
+@require_login
+def setpoint():
+    setpoint = request.args.get('setpoint')
+    logging.info(f'Setpoint: {selected_id}')  # Log the selected ID
+    flash(f'Setpoint: {selected_id}')
+    async def setpoint_mqtt():
+        async with aiomqtt.Client(
+            os.environ["SERVIDOR"],
+            username=os.environ["MQTT_USR"],
+            password=os.environ["MQTT_PASS"],
+            port=int(os.environ["PUERTO_MQTTS"]),
+            tls_context=tls_context,
+        ) as client:
+            topic = nodo + '/Setpoint'
+            await client.publish(topic=topic, payload=setpoint, qos=1)
+    asyncio.run(setpoint_mqtt())
+    return render_template('panel.html',theme='cerulean')
+
+@app.route('/Volver', methods=['GET'])
+@require_login
+def Volver():
     return redirect(url_for('index'))
 
 @app.route("/logout")
