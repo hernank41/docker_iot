@@ -107,6 +107,10 @@ services:
     environment:
       - TZ=America/Argentina/Buenos_Aires 
       - TB_TOKEN=${TB_TOKEN}
-      - TB_AUTORIZADOS=${TB_AUTORIZADOS}
+      # - TB_AUTORIZADOS=${TB_AUTORIZADOS}
+      - MARIADB_SERVER=${MARIADB_SERVER}
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_USER_PASS=${MARIADB_USER_PASS}
+      - MARIADB_DB=${MARIADB_DB}
 volumes:
   portainer_data:
