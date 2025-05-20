@@ -5,10 +5,11 @@ import logging, os, aiomysql
 token=os.environ["TB_TOKEN"]
 
 logging.basicConfig(format='%(asctime)s - TelegramBot - %(levelname)s - %(message)s', level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 async def sin_autorizacion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info("intento de conexión de: " + str(update.message.from_user.id))
-    logging.info(context.application.handlers[0][0].filters.inv_filter.user_ids)
+    logging.info(context.application.handlers[0][0].filters.or_filter.inv_filter.user_ids)
     sql = "SELECT telegram_id FROM autorizados"
     conn = await aiomysql.connect(host=os.environ["MARIADB_SERVER"], port=3306,
                                     user=os.environ["MARIADB_USER"],
@@ -17,15 +18,15 @@ async def sin_autorizacion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with conn.cursor() as cur:
         await cur.execute(sql)
         r = await cur.fetchall()
-        context.application.handlers[0][0].filters.inv_filter.user_ids = set([int(row[0]) for row in r])
-        if update.effective_chat.id in context.application.handlers[0][0].filters.inv_filter.user_ids:
+        context.application.handlers[0][0].filters.or_filter.inv_filter.user_ids = set([int(row[0]) for row in r])
+        if update.effective_chat.id in context.application.handlers[0][0].filters.or_filter.inv_filter.user_ids:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="ahora está autorizado")
             await start(update, context)
         else:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="no autorizado")
     await cur.close()
     conn.close()
-    logging.info(context.application.handlers[0][0].filters.inv_filter.user_ids)
+    logging.info(context.application.handlers[0][0].filters.or_filter.inv_filter.user_ids)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info("se conectó: " + str(update.message.from_user.id))
@@ -45,7 +46,7 @@ async def acercade(update: Update, context):
 
 def main():
     application = Application.builder().token(token).build()
-    application.add_handler(MessageHandler(~ filters.User(), sin_autorizacion))
+    application.add_handler(MessageHandler(filters.ALL | ~filters.User(), sin_autorizacion))
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('acercade', acercade))
     application.run_polling()
