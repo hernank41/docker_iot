@@ -29,17 +29,16 @@ def index():
 
 @app.route('/add_contact', methods=['POST'])
 def add_contact():
-    if request.method == 'POST':
-        nombre = request.form['nombre']
-        tel = request.form['tel']
-        email = request.form['email']
-        cur = mysql.connection.cursor()
-        cur.execute("INSERT INTO contactos (nombre, tel, email) VALUES (%s,%s,%s)"
-                    , (nombre, tel, email))
-        if mysql.connection.affected_rows():
-            flash('Se agregó un contacto')  # usa sesión
-            logging.info("se agregó un contacto")
-        mysql.connection.commit()
+    nombre = request.form['nombre']
+    tel = request.form['tel']
+    email = request.form['email']
+    cur = mysql.connection.cursor()
+    cur.execute("INSERT INTO contactos (nombre, tel, email) VALUES (%s,%s,%s)"
+                , (nombre, tel, email))
+    if mysql.connection.affected_rows():
+        flash('Se agregó un contacto')  # usa sesión
+        logging.info("se agregó un contacto")
+    mysql.connection.commit()
     return redirect(url_for('index'))
 
 @app.route('/borrar/<string:id>', methods = ['GET'])
@@ -62,14 +61,13 @@ def conseguir_contacto(id):
 
 @app.route('/actualizar/<id>', methods=['POST'])
 def actualizar_contacto(id):
-    if request.method == 'POST':
-        nombre = request.form['nombre']
-        tel = request.form['tel']
-        email = request.form['email']
-        cur = mysql.connection.cursor()
-        cur.execute("UPDATE contactos SET nombre = %s, tel = %s, email = %s WHERE id = %s", (nombre, tel, email, id))
-        if mysql.connection.affected_rows():
-            flash('Se actualizó un contacto')  # usa sesión
-            logging.info("se actualizó un contacto")
-            mysql.connection.commit()
+    nombre = request.form['nombre']
+    tel = request.form['tel']
+    email = request.form['email']
+    cur = mysql.connection.cursor()
+    cur.execute("UPDATE contactos SET nombre = %s, tel = %s, email = %s WHERE id = %s", (nombre, tel, email, id))
+    if mysql.connection.affected_rows():
+        flash('Se actualizó un contacto')  # usa sesión
+        logging.info("se actualizó un contacto")
+        mysql.connection.commit()
     return redirect(url_for('index'))
