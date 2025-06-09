@@ -1,9 +1,18 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, Response
 from flask_mysqldb import MySQL
 import os, logging
 from functools import wraps
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
+
+import matplotlib
+import matplotlib.dates as matdates
+from io import BytesIO
+from matplotlib.backends.backend_svg import FigureCanvasSVG
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import matplotlib.ticker as ticker
+
 
 logging.basicConfig(format='%(asctime)s - CRUD - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -155,3 +164,37 @@ def ReturnJSON():
     }
     # return jsonify(diccio)
     return diccio
+
+@app.route('/graficos/<variable>/<int:mod>')
+def graficos(variable,mod):
+    x = mysql.connection.cursor()
+    x.execute("USE sensores_remotos")
+
+    fig, ax = plt.subplots(figsize=(20, 10))
+    consulta="select timestamp,{} from mediciones where id mod {} = 0 and sensor_id like 'sensor_1'".format(variable,mod)
+    x.execute(consulta)
+
+    filas = x.fetchall()
+    fecha,var=zip(*filas)
+    #print(valores)
+    ax.plot(fecha,var, 'r', label="variable[2]")
+    plt.legend(loc="lower left")
+    xax = ax.get_xaxis()
+    xax.set_major_locator(mdates.DayLocator())
+    xax.set_major_formatter(mdates.DateFormatter('%d %b'))
+
+    xax.set_minor_locator(mdates.HourLocator(byhour=range(0,24,2)))
+    xax.set_minor_formatter(mdates.DateFormatter('%H'))
+    xax.set_tick_params(which='major', pad=15)
+    yax = ax.get_yaxis()
+    yax.set_minor_locator(ticker.MultipleLocator(5))
+    yax.set_major_formatter(ticker.FormatStrFormatter('%d'))
+    ax.set_ylim(bottom=0)
+    ax.grid(True, which='both')
+    ax.set_title("titulo", fontsize=14, verticalalignment='bottom')
+    ax.set_ylabel("leyenda")
+
+    buffer = BytesIO()
+    FigureCanvasSVG(fig).print_svg(buffer, metadata={'Creator': 'gax', 'Title': 'Awesome'})
+    return Response(buffer.getvalue(), mimetype="image/svg+xml")
+
