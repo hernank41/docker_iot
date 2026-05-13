@@ -1,5 +1,11 @@
 FROM python:3.11-slim
 
+# Instalar cliente SSH y limpiar la caché para reducir el tamaño
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssh-client && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 ENV TZ="America/Argentina/Buenos_Aires"
