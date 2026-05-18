@@ -134,8 +134,18 @@ dmypy.json
 .env
 
 #swag related files: ignore all except NGINX conf
-swag/
 grafana/
 mosquitto/
 wireguard/
 mariadb/
+
+swag/*
+!swag/etc/
+swag/etc/*
+!swag/etc/letsencrypt/
+swag/etc/letsencrypt/*
+!swag/etc/letsencrypt/renewal-hooks/
+swag/etc/letsencrypt/renewal-hooks/*
+!swag/etc/letsencrypt/renewal-hooks/deploy/
+swag/etc/letsencrypt/renewal-hooks/deploy/*
+!swag/etc/letsencrypt/renewal-hooks/deploy/reload-mosquitto.sh
