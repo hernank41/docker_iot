@@ -44,6 +44,8 @@ services:
     image: eclipse-mosquitto
     container_name: mosquitto
     user: "1000:1000"
+    environment:
+      - TZ=America/Argentina/Buenos_Aires 
     ports:
       - 1883:1883
       - ${PUERTO_MQTTS}:8883
@@ -96,7 +98,7 @@ services:
       - MOSQUITTO_CONTAINER=mosquitto
     volumes:
       - ./swag:/config
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - ${PUERTO}:443/tcp
       - 80:80
