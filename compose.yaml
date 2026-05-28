@@ -101,6 +101,8 @@ services:
     restart: unless-stopped
   telegrambot:
     image: telegrambot
+    build:
+      context: ./telegrambot
     container_name: telegrambot
     environment:
       - TZ=America/Argentina/Buenos_Aires 
