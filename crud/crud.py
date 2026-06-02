@@ -44,7 +44,7 @@ def add_contact():
 @app.route('/borrar/<string:id>', methods = ['GET'])
 def borrar_contacto(id):
     cur = mysql.connection.cursor()
-    cur.execute('DELETE FROM contactos WHERE id = {0}'.format(id))
+    cur.execute('DELETE FROM contactos WHERE id = %s', (id,))
     if mysql.connection.affected_rows():
         flash('Se eliminó un contacto')  # usa sesión
         logging.info("se eliminó un contacto")
