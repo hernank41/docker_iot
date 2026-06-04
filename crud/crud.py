@@ -3,7 +3,10 @@ from flask_mysqldb import MySQL
 import os, logging
 from functools import wraps
 from werkzeug.middleware.proxy_fix import ProxyFix
-from werkzeug.security import check_password_hash, generate_password_hash
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
+ph = PasswordHasher()
 
 logging.basicConfig(format='%(asctime)s - CRUD - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -45,10 +48,10 @@ def registrar():
         elif not request.form.get("password"):
             return "el campo contraseña es oblicatorio"
 
-        passhash=generate_password_hash(request.form.get("password"), method='scrypt', salt_length=16)
+        passhash=ph.hash(request.form.get("password"))
         logging.info(passhash)
         cur = mysql.connection.cursor()
-        cur.execute("INSERT INTO usuarios (usuario, hash) VALUES (%s,%s)", (request.form.get("usuario"), passhash[17:]))
+        cur.execute("INSERT INTO usuarios (usuario, hash) VALUES (%s,%s)", (request.form.get("usuario"), passhash))
         if mysql.connection.affected_rows():
             flash('Se agregó un usuario')  # usa sesión
             logging.info("se agregó un usuario")
@@ -71,12 +74,14 @@ def login():
         cur.execute("SELECT * FROM usuarios WHERE usuario LIKE %s", (request.form.get("usuario"),))
         rows=cur.fetchone()
         if(rows):
-            if (check_password_hash('scrypt:32768:8:1$' + rows[2],request.form.get("password"))):
+            try:
+                ph.verify(rows[2], request.form.get("password"))  # True si coincide
                 session.permanent = True
                 session["user_id"]=request.form.get("usuario")
                 logging.info("se autenticó correctamente")
                 return redirect(url_for('index'))
-            else:
+            except VerifyMismatchError:
+                # Contraseña incorrect
                 flash('usuario o contraseña incorrecto')
                 return redirect(url_for('login'))
     return render_template('login.html')
