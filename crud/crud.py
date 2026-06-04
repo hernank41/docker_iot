@@ -62,10 +62,10 @@ def login():
     if request.method == "POST":
         # Ensure username was submitted
         if not request.form.get("usuario"):
-            return "el campo usuario es oblicatorio"
+            return "el campo usuario es obligatorio"
         # Ensure password was submitted
         elif not request.form.get("password"):
-            return "el campo contraseña es oblicatorio"
+            return "el campo contraseña es obligatorio"
 
         cur = mysql.connection.cursor()
         cur.execute("SELECT * FROM usuarios WHERE usuario LIKE %s", (request.form.get("usuario"),))
