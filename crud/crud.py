@@ -108,7 +108,7 @@ def add_contact():
 @require_login
 def borrar_contacto(id):
     cur = mysql.connection.cursor()
-    cur.execute('DELETE FROM contactos WHERE id = {0}'.format(id))
+    cur.execute('DELETE FROM contactos WHERE id = %s', (id,))
     if mysql.connection.affected_rows():
         flash('Se eliminó un contacto')  # usa sesión
         logging.info("se eliminó un contacto")
