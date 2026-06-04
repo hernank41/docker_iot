@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <title>FLASK CRUD 1.1</title>
+  </head>
+  <body>
+      
+
+<form action="/add_contact" method="POST">
+  <input type="text" name="nombre" placeholder="Nombre completo">
+  <input type="tel" name="tel" placeholder="teléfono">
+  <input type="email" name="email" placeholder="Email">
+  <button>guardar</button>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <td>ID</td>
+      <td>Nombre completo</td>
+      <td>teléfono</td>
+      <td>Email</td>
+      <td>acción</td>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr>
+      <td>1</td>
+      <td>german</td>
+      <td>2198372193</td>
+      <td>fdf@kjh.com</td>
+      <td>
+        <a href="/edit/1">editar</a>
+        <a href="/delete/1">borrar</a>
+      </td>
+    </tr>
+    
+    <tr>
+      <td>2</td>
+      <td>alejandro</td>
+      <td>8765336</td>
+      <td>kjsaghd@kljdsah.com</td>
+      <td>
+        <a href="/edit/2">editar</a>
+        <a href="/delete/2">borrar</a>
+      </td>
+    </tr>
+    
+  </tbody>
+</table>
+
+  </body>
+</html>
