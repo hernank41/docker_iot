@@ -117,7 +117,7 @@ def add_contact():
 @require_login
 def borrar_contacto(id):
     cur = mysql.connection.cursor()
-    cur.execute('DELETE FROM contactos WHERE id = {0}'.format(id))
+    cur.execute('DELETE FROM contactos WHERE id = %s', (id,))
     if mysql.connection.affected_rows():
         flash('Se eliminó un contacto')  # usa sesión
         logging.info("se eliminó un contacto")
@@ -167,14 +167,28 @@ def ReturnJSON():
 
 @app.route('/graficos/<variable>/<int:mod>')
 def graficos(variable,mod):
+    if variable not in {'temperatura', 'humedad'}:
+        return "Variable no permitida"
+    
     x = mysql.connection.cursor()
-    x.execute("USE sensores_remotos")
+    x.execute("USE sensores_remotos") # dar permisos SELECT al usuario crud 
 
     fig, ax = plt.subplots(figsize=(20, 10))
-    consulta="select timestamp,{} from mediciones where id mod {} = 0 and sensor_id like 'sensor_1'".format(variable,mod)
+    consulta=f"""SELECT timestamp, {variable}
+            FROM (
+                SELECT timestamp, {variable},
+                    ROW_NUMBER() OVER (ORDER BY id) AS rn
+                FROM mediciones
+                WHERE timestamp >= NOW() - INTERVAL 1 DAY
+                AND sensor_id LIKE 'sensor_1'
+            ) AS t
+            WHERE rn % {mod} = 0
+            ORDER BY timestamp;"""
+    logging.info(consulta)
     x.execute(consulta)
 
     filas = x.fetchall()
+    logging.info(filas)
     fecha,var=zip(*filas)
     #print(valores)
     ax.plot(fecha,var, 'r', label="variable[2]")
