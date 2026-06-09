@@ -1,3 +1,4 @@
-Flask
-flask-mysqldb
-gunicorn
+Quart>=0.19.0
+asyncmy>=0.2.0
+hypercorn>=0.15.0
+argon2-cffi>=21.3.0
