@@ -1,4 +1,5 @@
-asyncmy==0.2.9
-fastapi==0.111.0
-gunicorn==22.0.0
-SQLAlchemy[asyncio]==2.0.30
+asyncmy
+fastapi
+gunicorn
+SQLAlchemy[asyncio]
+uvicorn[standard]
