@@ -72,7 +72,7 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
     restart: unless-stopped
   portainer:
-    image: portainer/portainer-ce:2.20.2
+    image: portainer/portainer-ce
     container_name: portainer
     ports:
       - 9443:9443
