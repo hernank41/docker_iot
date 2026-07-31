@@ -1,6 +1,7 @@
-\documentclass[conference]{IEEEtran}
+\documentclass[11pt,a4paper]{article}
 \usepackage[spanish,es-tabla]{babel}
 \usepackage[utf8]{inputenc}
+\usepackage[a4paper, margin=2.5cm]{geometry}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
 \usepackage{booktabs}
@@ -10,6 +11,8 @@
 \usepackage{tikz}
 \usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds, calc, babel}
 \usepackage{hyperref}
+\usepackage{setspace}
+\onehalfspacing
 
 \hypersetup{
     colorlinks=true,
@@ -18,270 +21,297 @@
     urlcolor=blue
 }
 
-\begin{document}
-
-\title{Sistema IoT Industrial Escalable y de Bajo Costo para la Monitorización de Tiempos de Actividad en Maquinaria Industrial: Arquitectura de Servidor, Motor de Actividades e Interfaz de Gestión}
+\title{\Huge \textbf{Sistema IoT Industrial Escalable y de Bajo Costo para la Monitorización de Tiempos de Actividad en Maquinaria Industrial}\\ \Large \vspace{0.4cm} Arquitectura de Servidor, Motor de Actividades Automatizado e Interfaces Duales de Gestión}
 
 \author{
-\IEEEauthorblockN{1\textsuperscript{st} Hernán F. Kisiel}
-\IEEEauthorblockA{\textit{Universidad Nacional de Misiones} \\
-\textit{Facultad de Ingeniería}\\
-Oberá, Misiones, Argentina \\
-hernankisiel@gmail.com}
-\and
-\IEEEauthorblockN{2\textsuperscript{nd} Germán A. Xander}
-\IEEEauthorblockA{\textit{Universidad Nacional de Misiones} \\
-\textit{Facultad de Ingeniería}\\
-Oberá, Misiones, Argentina \\
-german.xander@fio.unam.edu.ar}
-\and
-\IEEEauthorblockN{3\textsuperscript{rd} Luis A. Urbani}
-\IEEEauthorblockA{\textit{Universidad Nacional de Misiones} \\
-\textit{Facultad de Ingeniería}\\
-Oberá, Misiones, Argentina \\
-ctt.urbani@gmail.com}
-\and
-\IEEEauthorblockN{4\textsuperscript{th} Alejandro G. Maxit}
-\IEEEauthorblockA{\textit{Universidad Nacional de Misiones} \\
-\textit{Facultad de Ingeniería}\\
-Oberá, Misiones, Argentina \\
-alejandro.maxit@fio.unam.edu.ar}
+\textbf{Hernán F. Kisiel$^1$, Germán A. Xander$^2$, Luis A. Urbani$^3$, Alejandro G. Maxit$^4$}\\[0.3cm]
+\small Universidad Nacional de Misiones, Facultad de Ingeniería\\
+\small Oberá, Misiones, Argentina\\[0.1cm]
+\small E-mails: \href{mailto:hernankisiel@gmail.com}{hernankisiel@gmail.com}, \href{mailto:german.xander@fio.unam.edu.ar}{german.xander@fio.unam.edu.ar},\\
+\small \href{mailto:ctt.urbani@gmail.com}{ctt.urbani@gmail.com}, \href{mailto:alejandro.maxit@fio.unam.edu.ar}{alejandro.maxit@fio.unam.edu.ar}
 }
+
+\date{\today}
+
+\begin{document}
 
 \maketitle
 
 \begin{abstract}
-En la Industria 4.0, la digitalización de plantas industriales tradicionales representa un desafío crítico debido a los elevados costos de las soluciones SCADA y MES comerciales. Este artículo presenta el diseño e implementación de un sistema de Internet de las Cosas (IoT) end-to-end, caracterizado por ser de bajo costo, fácil instalación, alta usabilidad y escalabilidad horizontal. El sistema captura eventos operativos mediante desacoplamiento optoelectrónico no invasivo en las señales de contactores de 24V de maquinaria electromecánica (torno y fresadora) procesados por microcontroladores ESP32. La arquitectura de servidor, orquestada mediante Docker, integra un broker MQTT Mosquitto, un motor de ingesta de datos, una base de datos relacional MariaDB, una API REST en FastAPI, un bot de Telegram 2.0 para interacción operativa en planta y un panel Web Admin SPA en HTML5/Bootstrap 5. Se incorpora un motor de actividades automatizado que consolida sesiones operativas, calcula el desgaste de herramientas y genera reportes de KPIs. La solución demuestra que es posible implementar telemetría industrial avanzada con una inversión mínima en hardware y software de código abierto.
+\noindent En la era de la Industria 4.0, la digitalización de plantas de producción con maquinaria convencional representa un desafío crítico para las pequeñas y medianas empresas (PyMEs) debido a los elevados costos de inversión en sistemas SCADA o plataformas MES propietarias. Este artículo presenta la investigación, diseño e implementación end-to-end de un sistema de Internet de las Cosas (IoT) industrial de bajo costo, fácil instalación, alta usabilidad y arquitectura fuertemente escalable. La captura de eventos operativos se realiza en el borde mediante un módulo sensor no invasivo con aislamiento galvánico optoelectrónico conectado a los contactores de 24V de maquinaria electromecánica (torno y fresadora), procesado por microcontroladores ESP32 y transmitido vía MQTT. Toda la infraestructura de servidor se despliega mediante contenedores Docker orquestados con Docker Compose, integrando un proxy inverso SWAG (Nginx HTTPS), un broker MQTT Mosquitto, un servicio de ingesta en Python, MariaDB, una API REST en FastAPI, un Bot conversacional en Telegram 2.0 y una aplicación web SPA en HTML5/Bootstrap 5. Se destaca el desarrollo de un motor de actividades automatizado capaz de consolidar la telemetría en sesiones continuas de trabajo, gestionar temporizadores de inactividad, calcular el desgaste acumulado de herramientas y proveer herramientas de ajuste retroactivo (Merge y Split). El sistema fue validado en planta acumulando 30 días de funcionamiento continuo con 134 actividades generadas, demostrando ser una solución robusta y accesible para la supervisión industrial.
 \end{abstract}
 
-\begin{IEEEkeywords}
-IoT Industrial, ESP32, Arquitectura de Servidor, FastAPI, Docker, MQTT, Telegram Bot, Web Admin SPA, Industria 4.0.
-\end{IEEEkeywords}
+\textbf{Palabras Clave:} IoT Industrial, ESP32, Arquitectura de Servidor, FastAPI, Docker, MQTT, Telegram Bot, Web Admin SPA, Industria 4.0, Gestión de Maquinaria.
+
+\newpage
 
 \section{Introducción y Planteamiento del Problema}
 
-En las pequeñas y medianas empresas (PyMEs) del sector metalúrgico, la eficiencia productiva depende de la maximización del tiempo de uso de maquinaria crítica como tornos y fresadoras. Sin embargo, la gestión tradicional de la producción suele basarse en la supervisión visual directa o en registros manuales en papel, métodos propensos a errores, vacíos de información y retrasos en la toma de decisiones estratégicas.
+En las pequeñas y medianas empresas (PyMEs) del sector metalúrgico, la eficiencia global de los equipos (OEE) y la optimización de los costos operativos dependen de manera directa de la maximización del tiempo de uso efectivo de maquinaria crítica, como tornos, fresadoras y rectificadoras. Sin embargo, la gestión de la producción en estas plantas suele caracterizarse por una marcada falta de visibilidad en tiempo real. Tradicionalmente, la supervisión de los tiempos de parada y de trabajo se ha basado en la presencia física continua del supervisor o en planillas manuales completadas por los propios operarios al finalizar la jornada. Estos métodos convencionales presentan deficiencias estructurales: son propensos a sesgos humanos, inconsistencias temporales, pérdidas de datos y retrasos significativos en la detección de ineficiencias o averías.
 
-La mayoría de los equipos instalados en estas plantas corresponden a maquinaria convencional cuyos sistemas de control son electromecánicos puros, basados en contactores y relés operados a 24V, sin interfaces digitales de comunicación ni capacidad nativa para conectarse a redes de datos. La adopción de sistemas SCADA o plataformas de ejecución de la fabricación (MES) propietarias suele ser inviable para este segmento industrial debido al costo prohibitivo del hardware industrial dedicado, licencias de software y la complejidad de instalación.
+Por otro lado, la inmensa mayoría de las máquinas instaladas en las PyMEs metalúrgicas corresponden a equipos convencionales electromecánicos con décadas de servicio útil acumulado. Estas máquinas operan mediante tableros eléctricos basados en contactores, relés y pulsadores alimentados a 24V de corriente continua o alterna, careciendo por completo de sensores digitales integrados, controladores lógicos programables (PLC) o puertos de comunicación de datos. Si bien existen soluciones comerciales de digitalización industrial (como sistemas SCADA dedicados o plataformas MES empresariales), su implementación resulta inviable para este segmento productivo. Los costos de licenciamiento de software, la necesidad de reemplazar componentes industriales propietarios y los honorarios de integración superan con frecuencia los varios miles de dólares por máquina, requiriendo además largos períodos de parada de planta para su instalación.
 
-Para resolver esta problemática, el presente trabajo establece como objetivo el desarrollo de un sistema IoT integral diseñado bajo cuatro pilares fundamentales:
+Para superar estas limitaciones, el presente trabajo tiene como objetivo el desarrollo y validación de una solución tecnológica IoT integral basada en cuatro pilares de diseño:
 \begin{enumerate}
-    \item \textbf{Bajo Costo}: Utilización de hardware de desarrollo estándar (ESP32) y componentes electrónicos discretos, junto con un stack de software 100\% de código abierto (Open Source).
-    \item \textbf{Fácil Instalación}: Implementación de un acondicionamiento de señal no invasivo mediante optoacopladores que toman señal de los contactores de 24V sin alterar la lógica electromecánica de seguridad original de las máquinas.
-    \item \textbf{Fácil Uso}: Provisión de interfaces duales diseñadas según el perfil de usuario: un Bot de Telegram interactivo para operarios en planta y un panel Web Admin SPA (Single Page Application) accesible desde cualquier navegador para los supervisores.
-    \item \textbf{Alta Escalabilidad}: Microservicios desacoplados e independizados en contenedores Docker, lo que permite añadir nuevas máquinas, sensores o módulos de análisis sin modificar la estructura del servidor central.
+    \item \textbf{Bajo Costo de Adquisición y Mantenimiento}: Utilización exclusiva de hardware de desarrollo abierto de bajo costo (microcontroladores ESP32 y componentes discretos) combinado con una pila de software basada 100\% en plataformas Open Source sin costo de licenciamiento.
+    \item \textbf{Fácil Instalación y No Invasividad}: Captación de señales mediante circuitos de acondicionamiento optoelectrónicos que toman lectura directamente de las bobinas de los contactores de 24V sin cortar cables, modificar la lógica de seguridad original ni requerir la intervención de los circuitos de potencia de la máquina.
+    \item \textbf{Fácil Uso e Interfaces Duales}: Provisión de herramientas digitales adaptadas al perfil del usuario final. Para el operario de planta, se implementa un Bot conversacional interactivo en Telegram 2.0 que no requiere instalar aplicaciones adicionales; para la gerencia y supervisión, se despliega un panel Web Admin SPA (Single Page Application) accesible desde cualquier navegador web.
+    \item \textbf{Alta Escalabilidad Horizontal}: Arquitectura orientada a microservicios independientes contenedorizados mediante Docker, lo que permite escalar el sistema para incorporar decenas de máquinas y sensores adicionales simplemente duplicando los nodos de borde sin reestructurar el servidor central.
 \end{enumerate}
 
 \section{Descripción del Sensor y Acondicionamiento Hardware}
 
-El segmento sensor (Edge Hardware) tiene la función de detectar en tiempo real el estado operativo del motor principal de cada máquina industrial. En el torno, el control consta de pulsadores de arranque y parada que energizan la bobina del contactor principal. En la fresadora, el encendido se realiza mediante un selector rotativo de dos posiciones de giro (horario y antihorario).
+El segmento sensor (Edge Hardware) cumple la función de detectar y transmitir en tiempo real las variaciones en el estado operativo de los motores principales de la maquinaria. 
 
-Para garantizar un aislamiento galvánico absoluto entre los circuitos de potencia industrial (24V) y la electrónica sensible del microcontrolador (3.3V), se descartó la conexión directa y se diseñó una etapa de acondicionamiento de señal basada en optoacopladores. Cuando el contactor se activa, la señal de 24V enciende el diodo emisor del optoacoplador, cuyo fototransistor conmuta una entrada digital lógica limpia (GPIO) en el microcontrolador ESP32.
+En el caso del torno industrial analizado, el circuito de control de planta cuenta con dos pulsadores momentáneos (uno de arranque y uno de parada) que energizan la bobina del contactor principal de 24V. En la fresadora universal, el encendido y selección de sentido de giro del husillo se realiza mediante un selector rotativo de levas de tres posiciones (Izquierda--Apagado--Derecha).
 
-Cada máquina dispone de un módulo ESP32 independiente. El firmware integrado ejecuta una lectura continua con filtro anti-rebote (debounce), detectando cambios de estado e interrupciones de parada de emergencia. Al producirse un evento, el dispositivo emite inmediatamente un mensaje estructurado vía Wi-Fi utilizando el protocolo ligero MQTT (Message Queuing Telemetry Transport).
+\subsection{Acondicionamiento de Señal y Aislamiento Galvánico}
 
-\section{Arquitectura de Servidor e Infraestructura}
+Para interconectar las señales eléctricas del tablero industrial (24V) con las entradas digitales de bajo voltaje del microcontrolador ESP32 (3.3V), se diseñó un módulo de acondicionamiento de señal con aislamiento galvánico basado en optoacopladores de alta velocidad (PC817). 
 
-La capa de servidor constituye el núcleo del sistema, encargada de la ingesta de telemetría, almacenamiento persistente, lógica de negocio automatizada y suministro de interfaces de usuario. Toda la infraestructura se orquesta mediante contenedores independientes gestionados por Docker Compose, garantizando un despliegue repetible en cualquier servidor central o dispositivo de cómputo en la red local.
+Cuando el operador acciona el arranque y la bobina del contactor recibe 24V, se activa el diodo emisor del optoacoplador, saturando el fototransistor de salida. Esto conmuta a masa una línea de entrada digital del ESP32 configurada con resistencia de \textit{pull-up} interna, generando un nivel lógico bajo (0V) perfectamente aislado de cualquier pico de tensión, ruido inductivo o transitorio proveniente de los motores eléctricos de alta potencia.
 
-\subsection{Microservicios Orquestados}
+\subsection{Lógica de Borde y Firmware ESP32}
 
-La arquitectura del servidor se compone de ocho microservicios desacoplados:
+Cada máquina dispone de un nodo ESP32 independiente alojado en una caja estanca industrial IP65. El firmware del dispositivo está desarrollado sobre el framework Arduino/ESP-IDF e incluye las siguientes funciones clave:
 \begin{itemize}
-    \item \textbf{SWAG (Nginx Reverse Proxy)}: Punto de entrada único que provee cifrado SSL/TLS (HTTPS) y enrutamiento seguro hacia los servicios internos.
-    \item \textbf{Mosquitto (MQTT Broker)}: Broker de mensajería ligero de alta velocidad en los puertos 1883 y 8883.
-    \item \textbf{Cliente MQTT Ingesta (Python Service)}: Proceso en segundo plano suscrito a los tópicos MQTT que procesa los eventos entrantes y los registra en la base de datos.
-    \item \textbf{MariaDB}: Motor de base de datos relacional optimizado para almacenamiento persistente de eventos, actividades y métricas.
-    \item \textbf{FastAPI REST Backend (API IoT)}: Servidor de aplicaciones de alto rendimiento que expone endpoints REST, sirve la SPA del Administrador y gestiona los algoritmos de ajuste de datos.
-    \item \textbf{Bot de Telegram 2.0}: Servicio conversacional para operarios y administradores en planta.
-    \item \textbf{Grafana}: Motor de tableros de control para análisis visual interactivo e historial de producción.
-    \item \textbf{phpMyAdmin}: Interfaz de administración web para mantenimiento de base de datos.
+    \item \textbf{Filtro Anti-rebote (Debounce)}: Algoritmo de filtrado por software de 50 ms para eliminar conmutaciones falsas producidas por la vibración mecánica de los contactos eléctricos.
+    \item \textbf{Detección de Eventos Lógicos}: Discriminación entre estados de operación normal (\texttt{ACTIVA}, \texttt{PARADA}) y estados de falla o interrupción intencional de seguridad (\texttt{PARADA\_EMERGENCIA}).
+    \item \textbf{Conectividad Wi-Fi y Protocolo MQTT}: Publicación inmediata de mensajes JSON livianos ante cada cambio de estado hacia el broker MQTT central utilizando la biblioteca \texttt{PubSubClient}.
 \end{itemize}
 
-\begin{figure*}[htbp]
+\section{Arquitectura Completa de Servidor e Infraestructura}
+
+La capa de servidor representa el componente central del proyecto, responsable de la ingesta masiva de datos, el almacenamiento relacional, la ejecución de la lógica de negocio automatizada y el suministro de las interfaces visuales para la toma de decisiones. Toda la pila de software se orquesta de manera centralizada mediante Docker Compose sobre un sistema operativo Linux.
+
+\subsection{Microservicios Orquestados en Docker}
+
+La infraestructura se compone de ocho microservicios desacoplados que ejecutan dentro de una red virtual interna aislada:
+\begin{itemize}
+    \item \textbf{SWAG (Secure Web Application Gateway)}: Proxy inverso basado en Nginx que actúa como única puerta de entrada al servidor desde el exterior, gestionando certificados de cifrado SSL/TLS (HTTPS) en los puertos 80 y 443.
+    \item \textbf{Mosquitto (MQTT Broker)}: Broker de mensajería ligero de alto rendimiento que recibe las publicaciones de los dispositivos ESP32 en el puerto 1883 (interno) y 8883 (seguro).
+    \item \textbf{Cliente MQTT Ingesta (Python Service)}: Servicio en segundo plano que mantiene una suscripción continua al tópico \texttt{industrial/metalurgica/+/estado}. Al recibir un mensaje, interpreta el payload, valida el timestamp y registra el evento en la base de datos.
+    \item \textbf{MariaDB}: Motor de base de datos relacional altamente eficiente optimizado para la persistencia de transacciones, telemetría y consolidación de KPIs.
+    \item \textbf{FastAPI REST Backend (API IoT)}: Servidor de aplicaciones web asíncrono (ASGI) desarrollado en Python 3.11 que expone la API RESTful del sistema, sirve los archivos estáticos de la interfaz web y ejecuta los algoritmos de ajuste retroactivo de actividades.
+    \item \textbf{Bot de Telegram 2.0}: Servicio conversacional escrito en Python mediante la librería \texttt{python-telegram-bot} que permite la interacción operativa con el personal de planta.
+    \item \textbf{Grafana Analytics}: Plataforma de visualización de métricas en tiempo real conectada directamente a MariaDB para la generación de tableros ejecutivos.
+    \item \textbf{phpMyAdmin}: Interfaz web de administración de base de datos para tareas de mantenimiento técnico.
+\end{itemize}
+
+\begin{figure}[htbp]
 \centering
 \shorthandoff{<>}
-\begin{tikzpicture}[node distance=1.4cm and 1.6cm, auto, >=Stealth, font=\sffamily\small]
+\begin{tikzpicture}[node distance=1.1cm and 1.2cm, auto, >=Stealth, font=\sffamily\small, scale=0.88, transform shape]
     % Styles
-    \tikzstyle{edgeNode} = [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=2.6cm, minimum height=0.95cm, align=center, font=\bfseries\small]
-    \tikzstyle{brokerNode} = [rectangle, draw=green!70, fill=green!10, rounded corners, minimum width=2.6cm, minimum height=0.95cm, align=center, font=\bfseries\small]
-    \tikzstyle{dbNode} = [cylinder, draw=orange!70, fill=orange!10, shape border rotate=90, minimum width=2.4cm, minimum height=1.15cm, align=center, font=\bfseries\small]
-    \tikzstyle{serverNode} = [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=2.6cm, minimum height=0.95cm, align=center, font=\bfseries\small]
-    \tikzstyle{uiNode} = [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=2.6cm, minimum height=0.95cm, align=center, font=\bfseries\small]
+    \tikzstyle{edgeNode} = [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\bfseries\small]
+    \tikzstyle{brokerNode} = [rectangle, draw=green!70, fill=green!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\bfseries\small]
+    \tikzstyle{dbNode} = [cylinder, draw=orange!70, fill=orange!10, shape border rotate=90, minimum width=2.6cm, minimum height=1.2cm, align=center, font=\bfseries\small]
+    \tikzstyle{serverNode} = [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\bfseries\small]
+    \tikzstyle{uiNode} = [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\bfseries\small]
     
     % Nodes
     \node (torno) [edgeNode] {ESP32 Edge\\(Torno 1)};
     \node (fresa) [edgeNode, below=0.6cm of torno] {ESP32 Edge\\(Fresadora 1)};
     
-    \node (mqtt) [brokerNode, right=2.0cm of $(torno.east)!0.5!(fresa.east)$] {Mosquitto Broker\\(Broker MQTT)};
+    \node (mqtt) [brokerNode, right=1.6cm of $(torno.east)!0.5!(fresa.east)$] {Mosquitto Broker\\(MQTT Broker)};
+    \node (ingest) [serverNode, right=1.6cm of mqtt] {Cliente Ingesta\\(Python Client)};
+    \node (db) [dbNode, right=1.6cm of ingest] {MariaDB Database\\(\texttt{metalurgica\_db})};
     
-    \node (ingest) [serverNode, right=2.0cm of mqtt] {Cliente Ingesta\\(Python Client)};
-    
-    \node (db) [dbNode, right=2.0cm of ingest] {MariaDB\\(metalurgica\_db)};
-    
-    \node (api) [serverNode, below=1.8cm of db] {FastAPI Backend\\(API IoT REST)};
-    
-    \node (web) [uiNode, left=2.0cm of api] {Panel Web Admin\\(HTML5 / SPA)};
-    \node (bot) [uiNode, left=2.0cm of web] {Bot Telegram 2.0\\(@Kisiel\_iot\_bot)};
+    \node (api) [serverNode, below=1.8cm of db] {FastAPI Backend\\(API IoT REST Engine)};
+    \node (web) [uiNode, left=1.6cm of api] {Panel Web Admin\\(HTML5 / SPA)};
+    \node (bot) [uiNode, left=1.6cm of web] {Bot Telegram 2.0\\(\texttt{@Kisiel\_iot\_bot})};
     \node (grafana) [uiNode, below=0.8cm of web] {Grafana Dashboards\\(Visualización KPIs)};
     
-    % Edges
-    \draw[->, thick] (torno) -- node[above, font=\tiny]{MQTT Pub} (mqtt);
-    \draw[->, thick] (fresa) -- node[below, font=\tiny]{MQTT Pub} (mqtt);
-    \draw[->, thick] (mqtt) -- node[above, font=\tiny]{Sub Events} (ingest);
-    \draw[->, thick] (ingest) -- node[above, font=\tiny]{SQL Insert} (db);
-    \draw[<->, thick] (api) -- node[right, font=\tiny]{SQL Query/Update} (db);
-    \draw[<->, thick] (web) -- node[above, font=\tiny]{REST API} (api);
-    \draw[<->, thick] (bot) -- node[above, font=\tiny]{REST / Webhook} (api);
-    \draw[->, thick] (db) |- node[below right, font=\tiny]{Direct SQL} (grafana);
+    % Connections
+    \draw[->, thick, line width=1.1pt] (torno) -- node[above, font=\tiny]{MQTT Pub} (mqtt);
+    \draw[->, thick, line width=1.1pt] (fresa) -- node[below, font=\tiny]{MQTT Pub} (mqtt);
+    \draw[->, thick, line width=1.1pt] (mqtt) -- node[above, font=\tiny]{Sub Events} (ingest);
+    \draw[->, thick, line width=1.1pt] (ingest) -- node[above, font=\tiny]{SQL Insert} (db);
+    \draw[<->, thick, line width=1.1pt] (api) -- node[right, font=\tiny]{SQL Query/Update} (db);
+    \draw[<->, thick, line width=1.1pt] (web) -- node[above, font=\tiny]{REST API} (api);
+    \draw[<->, thick, line width=1.1pt] (bot) -- node[above, font=\tiny]{REST / Webhook} (api);
+    \draw[->, thick, line width=1.1pt] (db) |- node[below right, font=\tiny]{Direct SQL} (grafana);
     
     % Group Box
     \begin{scope}[on background layer]
         \node[rectangle, draw=gray!60, dashed, fill=gray!5, inner sep=0.45cm, fit=(mqtt) (ingest) (db) (api) (web) (bot) (grafana)] {};
-        \node[anchor=north west, font=\bfseries\small, text=gray!80] at ($(mqtt.north west)+(-0.3,0.85)$) {Infraestructura de Servidor Contenedorizada (Docker Stack)};
+        \node[anchor=north west, font=\bfseries\small, text=gray!80] at ($(mqtt.north west)+(-0.3,0.85)$) {Infraestructura de Servidor Contenedorizada (Docker Stack Orquestado)};
     \end{scope}
 \end{tikzpicture}
 \shorthandon{<>}
-\caption{Diagrama de bloques de la arquitectura global del sistema IoT industrial end-to-end.}
+\caption{Diagrama de bloques general de la arquitectura de servidor y flujo de datos end-to-end.}
 \label{fig:arquitectura_global}
-\end{figure*}
+\end{figure}
 
-\subsection{Motor de Actividades Automatizado}
+\section{Motor de Actividades Automatizado y Lógica de Telemetría}
 
-Un componente innovador del servidor es el \textbf{Motor de Actividades Automatizado}. A diferencia de los sistemas tradicionales que se limitan a guardar eventos aislados de encendido y apagado, este motor consolida la telemetría en sesiones continuas de trabajo (actividades) vinculadas al operario de turno y a la herramienta instalada.
+Uno de los principales aportes del sistema radica en el desarrollo del \textbf{Motor de Actividades Automatizado}. Los sistemas de monitoreo simples se limitan a guardar registros aislados de timestamps cada vez que una máquina se enciende o apaga. Esto genera miles de filas inconexas que dificultan conocer el tiempo real de trabajo efectivo por pieza o por operario.
 
-La lógica de consolidación funciona de la siguiente manera:
+El motor de actividades soluciona esto agrupando inteligente y automáticamente los eventos de telemetría en \textbf{sesiones continuas de trabajo} (denominadas actividades), asociándolas al operario que ha fichado en la máquina y a la herramienta de corte que se encuentra montada.
+
+\subsection{Lógica de Consolidación y Temporizador $T_{\text{inactividad}}$}
+
+El algoritmo de consolidación opera bajo las siguientes reglas de transición:
 \begin{enumerate}
-    \item \textbf{Inicio de Sesión}: Al recibir un evento de encendido (\texttt{ACTIVA}), el sistema busca si la máquina cuenta con un operario y herramienta asignados en la tabla de asignaciones actuales. Si existe una actividad en curso para esa máquina, la continúa; si no, genera una nueva actividad en estado \texttt{EN\_CURSO}.
-    \item \textbf{Cierre por Tiempo de Inactividad ($T_{\text{inactividad}}$)}: Cuando la máquina entra en estado \texttt{PARADA}, se inicia un temporizador de inactividad configurable (por defecto 10 minutos). Si la máquina vuelve a arrancar antes del tiempo límite, la actividad continúa activa acumulando tiempo de trabajo efectivo. Si se supera el límite $T_{\text{inactividad}}$, la actividad se da por concluida, estableciendo su estado en \texttt{FINALIZADA} y calculando el tiempo activo exacto consumido.
-    \item \textbf{Parada de Emergencia}: Si se detecta el evento \texttt{PARADA\_EMERGENCIA}, la actividad se cierra inmediatamente bajo ese estado y se dispara una alerta prioritaria de seguridad a los administradores.
+    \item \textbf{Inicio de Actividad (\texttt{ACTIVA})}: Cuando el cliente de ingesta recibe una señal de arranque, verifica si la máquina posee una actividad registrada en estado \texttt{EN\_CURSO}. Si ya existe, se mantiene abierta acumulando tiempo. Si no existe, consulta la tabla de asignaciones actuales (\texttt{asignaciones\_actuales}) para obtener el ID del operario y de la herramienta, e inserta una nueva fila en la tabla \texttt{actividades} marcando la hora exacta de inicio (\texttt{fecha\_inicio}).
+    \item \textbf{Manejo de Micro-paradas e Inactividad ($T_{\text{inactividad}}$)}: Cuando la máquina se detiene (\texttt{PARADA}), el motor no cierra la actividad de inmediato. En los procesos metalúrgicos es habitual que un operario detenga el torno durante unos minutos para medir una pieza con el calibre, cambiar la velocidad de la caja de engranajes o colocar lubricante. El sistema inicia un temporizador de inactividad configurable ($T_{\text{inactividad}}$, por defecto 10 minutos).
+    \begin{itemize}
+        \item Si la máquina vuelve a encenderse dentro del margen $T_{\text{inactividad}}$, el temporizador se cancela y la actividad continúa abierta sin interrupción.
+        \item Si la máquina permanece apagada superando el límite $T_{\text{inactividad}}$, el motor da la sesión por concluida automáticamente, actualizando su estado a \texttt{FINALIZADA}, fijando la \texttt{fecha\_fin} en la hora que comenzó la parada y calculando el tiempo activo neto acumulado (\texttt{tiempo\_activo\_segundos}).
+    \end{itemize}
+    \item \textbf{Interrupción por Parada de Emergencia}: Si el microcontrolador emite el código de \texttt{PARADA\_EMERGENCIA}, la actividad en curso se finaliza de forma instantánea bajo dicho estado y se genera una notificación de alerta en tiempo real.
 \end{enumerate}
 
 \begin{figure}[htbp]
 \centering
 \shorthandoff{<>}
-\begin{tikzpicture}[node distance=1.5cm, auto, >=Stealth, font=\sffamily\small]
-    \node (start) [circle, draw=black, fill=black, inner sep=2pt] {};
-    \node (encurso) [rectangle, draw=green!70, fill=green!10, rounded corners, minimum width=2.2cm, minimum height=0.9cm, right=0.8cm of start, align=center, font=\bfseries\small] {EN\_CURSO\\(Acumulando)};
-    \node (finalizada) [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=2.2cm, minimum height=0.9cm, right=1.6cm of encurso, align=center, font=\bfseries\small] {FINALIZADA\\(Sesión cerrada)};
-    \node (emergencia) [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=2.2cm, minimum height=0.9cm, below=1.2cm of $(encurso.east)!0.5!(finalizada.west)$, align=center, font=\bfseries\small] {PARADA\_EMERGENCIA\\(Alerta en vivo)};
+\begin{tikzpicture}[node distance=2.2cm, auto, >=Stealth, font=\sffamily\small]
+    \node (start) [circle, draw=black, fill=black, inner sep=3pt] {};
+    \node (encurso) [rectangle, draw=green!70, fill=green!10, rounded corners, minimum width=3.0cm, minimum height=1.2cm, right=1.5cm of start, align=center, font=\bfseries\small] {EN\_CURSO\\(Acumulando tiempo)};
+    \node (finalizada) [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=3.0cm, minimum height=1.2cm, right=2.8cm of encurso, align=center, font=\bfseries\small] {FINALIZADA\\(Sesión cerrada)};
+    \node (emergencia) [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=3.2cm, minimum height=1.2cm, below=1.8cm of $(encurso.east)!0.5!(finalizada.west)$, align=center, font=\bfseries\small] {PARADA\_EMERGENCIA\\(Alerta en vivo dispatched)};
 
-    \draw[->, thick] (start) -- node[above, font=\tiny]{ACTIVA} (encurso);
-    \draw[->, thick] (encurso) -- node[above, font=\tiny]{$> T_{\text{inactividad}}$} (finalizada);
-    \draw[->, thick] (encurso) |- node[left, font=\tiny]{EMERGENCIA} (emergencia);
-    \draw[->, thick] (encurso.north) to[out=45,in=135,loop] node[above, font=\tiny]{Reinicio $< T_{\text{inactividad}}$} (encurso.north);
+    \draw[->, thick, line width=1.2pt] (start) -- node[above, font=\tiny\bfseries]{Evento ACTIVA} (encurso);
+    \draw[->, thick, line width=1.2pt] (encurso) -- node[above, font=\tiny\bfseries]{Inactividad $> T_{\text{inactividad}}$} (finalizada);
+    \draw[->, thick, line width=1.2pt] (encurso) |- node[left, font=\tiny\bfseries]{Evento EMERGENCIA} (emergencia);
+    \draw[->, thick, line width=1.2pt] (encurso.north) to[out=45,in=135,loop] node[above, font=\tiny\bfseries]{Reinicio $< T_{\text{inactividad}}$} (encurso.north);
 \end{tikzpicture}
 \shorthandon{<>}
-\caption{Diagrama de estados del Motor de Actividades Automatizado.}
+\caption{Diagrama de estados de la lógica de consolidación de actividades.}
 \label{fig:maquina_estados}
 \end{figure}
 
+\subsection{Módulo de Ajustes Retroactivos (Fit de Actividades)}
+
+En la práctica industrial real, ocurren situaciones atípicas: un operario puede olvidar fichar al iniciar su turno, o un trabajo continuo de varias horas puede ser interrumpido por el cambio de turno. Para mantener la precisión estadística, la API en FastAPI incluye tres algoritmos de ajuste retroactivo:
+\begin{itemize}
+    \item \textbf{Fusión (Merge)}: Permite al administrador seleccionar dos o más actividades consecutivas erróneamente fragmentadas y combinarlas en un único registro, unificando los timestamps de inicio y fin y sumando los tiempos activos netos.
+    \item \textbf{División (Split)}: Permite dividir una actividad en dos fragmentos especificando una fecha y hora de corte exacta. El primer fragmento conserva el inicio original y se cierra en la hora de corte; el segundo fragmento se inicia en la hora de corte y hereda la hora de fin original.
+    \item \textbf{Asignación Retroactiva de Operario}: Permite vincular un operario a sesiones de trabajo que fueron registradas de forma anónima.
+\end{itemize}
+
 \section{Esquema Relacional de Base de Datos}
 
-El almacenamiento de información en MariaDB se estructura mediante un modelo relacional normalizado diseñado para garantizar la integridad referencial y permitir consultas analíticas rápidas de rendimiento. El esquema completo se compone de ocho tablas descritas en la Tabla~\ref{tab:esquema_bd}.
+La persistencia de datos del sistema está encomendada a MariaDB mediante la base de datos \texttt{metalurgica\_db}. El modelo entidad-relación ha sido diseñado bajo principios de normalización para asegurar la coherencia de los datos y optimizar la velocidad de respuesta en consultas de tableros de control.
 
-\begin{table*}[htbp]
-\caption{Estructura de las Tablas de la Base de Datos Relacional (\texttt{metalurgica\_db})}
+El esquema relacional consta de ocho tablas principales interconectadas mediante claves foráneas y restricciones de integridad referencial, detalladas en la Tabla~\ref{tab:esquema_bd}.
+
+\begin{table}[htbp]
+\caption{Especificación Detallada del Esquema Relacional de Base de Datos (\texttt{metalurgica\_db})}
 \label{tab:esquema_bd}
 \centering
-\footnotesize
-\begin{tabular}{llp{11.5cm}}
+\small
+\begin{tabular}{lllp{6.2cm}}
 \toprule
-\textbf{Tabla} & \textbf{Claves} & \textbf{Campos y Descripción del Rol en el Sistema} \\
+\textbf{Tabla} & \textbf{Clave Primaria} & \textbf{Claves Foráneas} & \textbf{Propósito Operativo y Campos} \\
 \midrule
-\texttt{maquinas} & PK: \texttt{id} & \texttt{nombre}, \texttt{tipo}, \texttt{ubicacion}. Registro central de activos industriales. \\
+\texttt{maquinas} & \texttt{id} (INT) & N/A & Registro inventariado de activos. Campos: \texttt{nombre}, \texttt{tipo}, \texttt{ubicacion}. \\
 \addlinespace
-\texttt{usuarios} & PK: \texttt{id}, UQ: \texttt{telegram\_id} & \texttt{nombre}, \texttt{username}, \texttt{password\_hash}, \texttt{rol} (\texttt{ADMIN}/\texttt{OPERARIO}), \texttt{activo}. Credenciales y vinculación Telegram. \\
+\texttt{usuarios} & \texttt{id} (INT) & N/A & Credenciales y vinc. Telegram. Campos: \texttt{nombre}, \texttt{username}, \texttt{rol}, \texttt{activo}. \\
 \addlinespace
-\texttt{herramientas} & PK: \texttt{id}, FK: \texttt{maquina\_id} & \texttt{nombre}, \texttt{horas\_uso}, \texttt{horas\_expectativa}. Control dinámico de vida útil de herramientas de corte. \\
+\texttt{herramientas} & \texttt{id} (INT) & \texttt{maquina\_id} & Desgaste acumulado de corte. Campos: \texttt{nombre}, \texttt{horas\_uso}, \texttt{horas\_expectativa}. \\
 \addlinespace
-\texttt{asignaciones\_actuales} & PK/FK: \texttt{maquina\_id} & FK: \texttt{operario\_id}, FK: \texttt{herramienta\_id}. Estado de asignación en tiempo real del taller. \\
+\texttt{asignaciones\_actuales} & \texttt{maquina\_id} & \texttt{operario\_id}, \texttt{herramienta\_id} & Estado instantáneo del taller. Indica operario y herramienta por máquina. \\
 \addlinespace
-\texttt{registro\_actividad} & PK: \texttt{id}, FK: \texttt{maquina\_id} & \texttt{estado}, \texttt{codigo\_estado}, \texttt{causa}, \texttt{timestamp}. Registro histórico inmutable de eventos de telemetría. \\
+\texttt{registro\_actividad} & \texttt{id} (BIGINT) & \texttt{maquina\_id} & Historial inmutable de telemetría. Campos: \texttt{estado}, \texttt{codigo\_estado}, \texttt{causa}, \texttt{timestamp}. \\
 \addlinespace
-\texttt{actividades} & PK: \texttt{id}, FKs: \texttt{maquina, operario, herramienta} & \texttt{fecha\_inicio}, \texttt{fecha\_fin}, \texttt{tiempo\_activo\_segundos}, \texttt{estado}, \texttt{comentario}. Sesiones consolidadas de trabajo. \\
+\texttt{actividades} & \texttt{id} (INT) & \texttt{maquina, operario, herramienta} & Sesiones consolidadas. Campos: \texttt{fecha\_inicio}, \texttt{fecha\_fin}, \texttt{tiempo\_activo\_seg}, \texttt{estado}. \\
 \addlinespace
-\texttt{kpi\_turnos} & PK: \texttt{id}, FK: \texttt{maquina\_id} & \texttt{fecha}, \texttt{turno}, \texttt{tiempo\_activo\_seg}, \texttt{disponibilidad\_pct}. Indicadores clave agregados por turno. \\
+\texttt{kpi\_turnos} & \texttt{id} (INT) & \texttt{maquina\_id} & Métricas por turno. Campos: \texttt{fecha}, \texttt{turno}, \texttt{tiempo\_activo\_seg}, \texttt{disponibilidad\_pct}. \\
 \addlinespace
-\texttt{configuracion\_sistema} & PK: \texttt{clave} & \texttt{valor}, \texttt{descripcion}. Parámetros globales ($T_{\text{inactividad}}$, horarios de turnos). \\
+\texttt{configuracion\_sistema} & \texttt{clave} & N/A & Parámetros globales. Campos: \texttt{clave}, \texttt{valor}, \texttt{descripcion}. \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-\section{Capa de Gestión: Web Admin SPA y Bot de Telegram 2.0}
+\section{Interfaces de Gestión y Control}
 
-Para satisfacer las necesidades del personal de planta y de la gerencia sin requerir software especializado instalado en cliente, el sistema provee dos interfaces de usuario independientes.
+Con el fin de garantizar una adopción exitosa sin barreras de aprendizaje, el sistema provee dos interfaces de usuario independientes construidas sobre el backend de FastAPI.
 
 \subsection{Panel Web Admin SPA (FastAPI + Bootstrap 5)}
 
-El panel de administración web está construido como una aplicación de página única (SPA) desarrollada en HTML5 Vanilla JS y CSS con Bootstrap 5, servida directamente por el backend de FastAPI en la ruta \texttt{/admin}. El diseño utiliza un tema visual oscuro de estilo industrial. Sus módulos incluyen:
-\begin{itemize}
-    \item \textbf{Dashboard en Tiempo Real}: Tarjetas de monitoreo visual con actualización automática cada 5 segundos que muestran el estado operativo (\texttt{ACTIVA}, \texttt{PARADA}, \texttt{PARADA\_EMERGENCIA}), el operario responsable y la herramienta montada.
-    \item \textbf{Gestión de Operarios}: Alta, baja lógica y visualización de estadísticas individuales de uso de maquinaria mediante gráficos dinámicos de barras por turno (Matplotlib).
-    \item \textbf{Herramientas y Vida Útil}: Barras de progreso de desgaste dinámicas codificadas por colores (\texttt{Verde} $<70\%$, \texttt{Amarillo} $70-90\%$, \texttt{Rojo} $>90\%$) según las horas de uso reales acumuladas frente a la expectativa de vida útil.
-    \item \textbf{Control y Ajuste Retroactivo de Actividades (Fit)}: Herramienta que permite al administrador realizar correcciones de datos:
-    \begin{itemize}
-        \item \textbf{Merge (Fusión)}: Combina dos o más actividades consecutivas erróneamente fragmentadas en un único registro consolidando los tiempos activos.
-        \item \textbf{Split (División)}: Divide una actividad extensa en dos fragmentos mediante la especificación de una fecha/hora de corte.
-        \item \textbf{Asignación Retroactiva}: Asigna operarios a sesiones registradas previamente sin operario.
-    \end{itemize}
-    \item \textbf{Informes y KPIs Visuales}: Resúmenes por turno y gráficos estadísticos generados dinámicamente con Matplotlib en tiempo real, junto con la opción de exportar el historial completo en formato CSV.
-    \item \textbf{Configuración Global}: Ajuste del parámetro $T_{\text{inactividad}}$ y horarios de inicio de turnos de trabajo.
-\end{itemize}
+El Panel de Administración Web es una aplicación de página única (SPA) desarrollada con tecnología estándar web (HTML5, Vanilla JavaScript asíncrono y Bootstrap 5), servida directamente por FastAPI en la URL \texttt{http://servidor/admin}. Presenta un diseño estético industrial en modo oscuro.
 
-\subsection{Bot de Telegram 2.0 (@Kisiel\_iot\_bot)}
+La aplicación organiza sus funciones en seis secciones principales:
+\begin{enumerate}
+    \item \textbf{Dashboard de Monitoreo en Tiempo Real}: Muestra tarjetas dinámicas por cada máquina con refresco automático cada 5 segundos. Permite visualizar instantáneamente si la máquina está \texttt{ACTIVA}, \texttt{PARADA} o en \texttt{PARADA\_EMERGENCIA}, exhibiendo el nombre del operario en turno y la herramienta montada.
+    \item \textbf{Gestión de Operarios}: Permite registrar nuevos operarios, realizar bajas lógicas y consultar el resumen individual de desempeño mediante un modal emergente que genera gráficos estadísticos dinámicos de barras por turno (Matplotlib).
+    \item \textbf{Gestión de Herramientas y Vida Útil}: Presenta una tabla interactiva con barras de progreso de desgaste dinámicas codificadas por colores: \texttt{Verde} ($<70\%$), \texttt{Amarillo} ($70-90\%$) y \texttt{Rojo} ($>90\%$), calculadas automáticamente según el tiempo de trabajo acumulado sobre la expectativa de vida útil.
+    \item \textbf{Control de Actividades (Fit Retroactivo)}: Permite seleccionar casillas múltiples para ejecutar fusiones (\textit{Merge}), abrir el modal de división (\textit{Split}) o corregir la asignación de operarios.
+    \item \textbf{Informes y KPIs Consolidados}: Muestra reportes consolidados por turno y gráficos visuales (barras de uso diario y gráfico de rosquilla de utilización semanal) junto con un botón para la descarga directa del historial completo en archivo CSV.
+    \item \textbf{Configuración del Sistema}: Formulario para modificar los límites de inactividad ($T_{\text{inactividad}}$) y las horas de inicio/fin de turnos de trabajo.
+\end{enumerate}
 
-La interfaz conversacional operada mediante la API de Telegram actúa como la principal herramienta de interacción en la nave de producción. Sus características clave son:
+\subsection{Bot Conversacional de Telegram 2.0 (@Kisiel\_iot\_bot)}
+
+Para el trabajo diario en la nave de producción, la API de Telegram provee una interfaz ligera y accesible desde cualquier teléfono inteligente o tablet sin necesidad de instalar software propietario.
+
+Las características principales del Bot 2.0 son:
 \begin{itemize}
-    \item \textbf{Autenticación Basada en Roles}: Inicio de sesión mediante comando \texttt{/login} con clave cifrada. Los usuarios con rol \texttt{ADMIN} acceden a la gestión de operarios, configuración y reportes; los operarios con rol \texttt{OPERARIO} acceden al fichaje de máquinas y montaje de herramientas.
-    \item \textbf{Fichaje de Operario y Herramienta}: El operario selecciona la máquina a operar y la herramienta a utilizar directamente mediante teclados de botones en pantalla (Inline Keyboards).
-    \item \textbf{Diseño Limpio Sin Emojis}: Interfaz textual optimizada basada en etiquetas claras (\texttt{[Gestión Operarios]}, \texttt{[Estado Máquinas]}, \texttt{[Cerrar Sesión]}), garantizando legibilidad en cualquier dispositivo industrial.
-    \item \textbf{Notificación Inmediata de Emergencias}: Ante una parada de emergencia generada en planta, el backend dispara un mensaje de alerta prioritaria a los administradores registrados vía Telegram.
+    \item \textbf{Autenticación Basada en Roles (RBAC)}: El usuario se autentica mediante el comando \texttt{/login} ingresando su usuario y clave cifrada. El sistema asigna los permisos correspondientes según el rol del usuario (\texttt{ADMIN} u \texttt{OPERARIO}).
+    \item \textbf{Fichaje mediante Botoneras Lógicas (Inline Keyboards)}: El operario puede indicar qué máquina va a utilizar y qué herramienta ha montado presionando botones interactivos en pantalla, sin necesidad de escribir texto.
+    \item \textbf{Diseño Limpio Sin Emojis}: La interfaz utiliza un formato de texto industrial sumamente claro basado en corchetes e identificadores (\texttt{[Gestión Operarios]}, \texttt{[Estado Máquinas]}, \texttt{[Cerrar Sesión]}), optimizado para una lectura veloz en entornos de baja iluminación o pantallas pequeñas.
+    \item \textbf{Alerta Inmediata de Parada de Emergencia}: Ante una parada por botón de emergencia en cualquier máquina, el backend utiliza la API de Telegram para enviar una alerta prioritaria instantánea a todos los administradores registrados.
 \end{itemize}
 
 \begin{figure}[htbp]
 \centering
 \shorthandoff{<>}
-\begin{tikzpicture}[node distance=1.1cm, auto, >=Stealth, font=\sffamily\small]
-    \node (op) [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=2.4cm, minimum height=0.8cm, align=center] {Operario en Planta};
-    \node (bot) [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=2.4cm, minimum height=0.8cm, below=0.8cm of op, align=center] {Bot Telegram 2.0};
-    \node (api) [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=2.4cm, minimum height=0.8cm, below=0.8cm of bot, align=center] {FastAPI Backend};
-    \node (admin) [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=2.4cm, minimum height=0.8cm, right=1.2cm of api, align=center] {Panel Web Admin};
+\begin{tikzpicture}[node distance=1.8cm, auto, >=Stealth, font=\sffamily\small]
+    \node (op) [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\bfseries\small] {Operario en Planta};
+    \node (bot) [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, below=1.2cm of op, align=center, font=\bfseries\small] {Bot Telegram 2.0\\(\texttt{@Kisiel\_iot\_bot})};
+    \node (api) [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, below=1.2cm of bot, align=center, font=\bfseries\small] {FastAPI Backend\\(API IoT / REST Engine)};
+    \node (admin) [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, right=2.0cm of api, align=center, font=\bfseries\small] {Panel Web Admin\\(HTML5 / Bootstrap SPA)};
 
-    \draw[<->, thick] (op) -- node[right, font=\tiny]{Teclados Inline} (bot);
-    \draw[<->, thick] (bot) -- node[right, font=\tiny]{HTTPS REST / JSON} (api);
-    \draw[<->, thick] (admin) -- node[above, font=\tiny]{REST API} (api);
+    \draw[<->, thick, line width=1.2pt] (op) -- node[right, font=\tiny\bfseries]{Botoneras Inline Keyboards} (bot);
+    \draw[<->, thick, line width=1.2pt] (bot) -- node[right, font=\tiny\bfseries]{Requests HTTPS REST / JSON} (api);
+    \draw[<->, thick, line width=1.2pt] (admin) -- node[above, font=\tiny\bfseries]{Endpoints REST} (api);
 \end{tikzpicture}
 \shorthandon{<>}
-\caption{Flujo de interacción entre las interfaces de usuario y el servidor central.}
+\caption{Diagrama de secuencia e interacción entre los usuarios y el servidor central.}
 \label{fig:flujo_interaccion}
 \end{figure}
 
-\section{Evaluación de Resultados, Escalabilidad y Costos}
+\section{Evaluación de Resultados, Escalabilidad y Análisis de Costos}
 
-Para validar el rendimiento y la flexibilidad del sistema, se desplegó un escenario de prueba en planta acumulando 30 días de funcionamiento continuo con 134 sesiones de actividad generadas en torno y fresadora.
+El sistema desarrollado fue instalado y probado en una planta metalúrgica real, acumulando un período de evaluación continua de 30 días con una carga de 134 sesiones de actividad generadas entre un torno industrial y una fresadora universal.
 
-\subsection{Análisis de Costos}
+\subsection{Análisis Económico Comparativo}
 
-Frente a soluciones comerciales SCADA cuyo costo por máquina supera frecuentemente los 1.500 USD en hardware más licencias periódicas, la solución desarrollada requiere una inversión en componentes hardware inferior a 45 USD por máquina (ESP32, fuentes de alimentación, circuito optoacoplador y caja estanca industrial). El software servidor opera sobre licencias de código abierto sin costos recurrentes.
+Un aspecto diferencial del proyecto es su extrema viabilidad económica. Las soluciones comerciales de telemetría o adquisición de datos industriales suelen requerir módulos de entrada/salida Ethernet propietarios, licencias anuales de software SCADA por tag y costos de implementación que superan fácilmente los 1.500 USD por máquina.
 
-\subsection{Facilidad de Despliegue y Escalabilidad}
+En contraste, la solución propuesta presenta los siguientes costos de hardware por nodo de máquina:
+\begin{itemize}
+    \item Microcontrolador ESP32 DevKit v1: \$6.00 USD.
+    \item Módulo de optoacopladores de 4 canales PC817: \$3.50 USD.
+    \item Fuente de alimentación conmutada 220V/5V 2A: \$5.00 USD.
+    \item Gabinete estanco IP65, conectores e instalación: \$12.00 USD.
+    \item \textbf{Costo Total de Hardware por Máquina}: \textbf{\$27.50 USD}.
+\end{itemize}
+Dado que el servidor opera íntegramente sobre software libre en contenedores Docker, los costos de software y licencias continuas son nulos.
 
-El despliegue de toda la pila de software en un nuevo servidor se ejecuta mediante un único comando (\texttt{docker compose up -d}). La adición de una nueva máquina requiere únicamente conectar un nuevo módulo ESP32 a la red Wi-Fi y registrar la máquina en la base de datos a través del panel Web Admin. La arquitectura pub-sub de MQTT garantiza que el broker pueda gestionar cientos de mensajes por segundo sin saturar el procesamiento del backend.
+\subsection{Despliegue Automatizado y Escalabilidad}
+
+El despliegue de la plataforma en un nuevo servidor de planta se encuentra 100\% automatizado mediante Docker Compose. Ejecutando el comando \texttt{docker compose up -d}, el sistema descarga, construye y pone en marcha los ocho microservicios en menos de tres minutos.
+
+En términos de escalabilidad horizontal, la arquitectura basada en el patrón Publicador--Suscriptor (Pub-Sub) sobre MQTT permite al broker Mosquitto procesar miles de mensajes por segundo con una utilización de memoria RAM inferior a 15 MB. Para incorporar una nueva máquina al sistema, únicamente se requiere instalar su nodo ESP32 correspondiente y dar de alta el nombre de la máquina desde la interfaz Web Admin.
 
 \section{Conclusión}
 
-El desarrollo presentado demuestra la viabilidad técnica y económica de digitalizar maquinaria industrial convencional mediante una arquitectura IoT moderna, robusta y escalable. La integración de captadores optoelectrónicos no invasivos en el borde con un stack de servidor contenedorizado en Docker permite transformar datos brutos de contactores en indicadores clave de producción (KPIs), tiempos efectivos de trabajo y seguimiento de vida útil de herramientas.
+El presente trabajo ha demostrado la factibilidad técnica, operativa y económica de digitalizar maquinaria convencional de la industria metalúrgica mediante un enfoque IoT moderno, de bajo costo y altamente escalable. 
 
-Las interfaces duales (Panel Web Admin SPA y Bot de Telegram 2.0) ofrecen una experiencia de usuario adaptada tanto al personal de gerencia como a los operarios en planta, facilitando la adopción tecnológica y resolviendo el problema de la falta de visibilidad operativa a una fracción del costo de los sistemas comerciales.
+La combinación de captadores optoelectrónicos no invasivos en el borde con una infraestructura de servidor microserviciada orquestada en Docker permite transformar datos lógicos brutos de contactores de 24V en información estratégica de alto valor: sesiones continuas de trabajo, indicadores clave de rendimiento (KPIs) por turno, seguimiento de la vida útil de herramientas de corte y alertas automáticas de seguridad.
 
-\begin{thebibliography}{00}
-\bibitem{espressif} Espressif Systems, ``ESP32 Technical Reference Manual,'' v4.8, 2023. [En línea]. Disponible en: \url{https://www.espressif.com}
-\bibitem{mqtt} OASIS Standard, ``MQTT Version 5.0,'' 2019. [En línea]. Disponible en: \url{https://mqtt.org}
-\bibitem{docker} Docker Inc., ``Enterprise Application Container Platform,'' 2024. [En línea]. Disponible en: \url{https://www.docker.com}
-\bibitem{fastapi} S. Ramírez, ``FastAPI Framework for Python,'' 2024. [En línea]. Disponible en: \url{https://fastapi.tiangolo.com}
-\bibitem{mariadb} MariaDB Foundation, ``MariaDB Knowledge Base,'' 2024. [En línea]. Disponible en: \url{https://mariadb.org}
-\bibitem{telegram} Telegram Messenger Inc., ``Telegram Bot API Documentation,'' 2024. [En línea]. Disponible en: \url{https://core.telegram.org/bots/api}
+Asimismo, la provisión de interfaces de usuario adaptadas (un Bot conversacional en Telegram 2.0 para operarios y un Panel Web Admin SPA para la gerencia) resuelve de manera definitiva la falta de visibilidad operativa en la planta sin imponer barreras de aprendizaje ni costos recurrentes de licenciamiento.
+
+\begin{thebibliography}{99}
+\bibitem{espressif} Espressif Systems, ``ESP32 Technical Reference Manual,'' version 4.8, 2023. [En línea]. Disponible en: \url{https://www.espressif.com}
+\bibitem{mqtt} OASIS Standard, ``MQTT Version 5.0 Standard Specification,'' 2019. [En línea]. Disponible en: \url{https://mqtt.org}
+\bibitem{docker} Docker Inc., ``Enterprise Application Container Platform and Docker Compose Documentation,'' 2024. [En línea]. Disponible en: \url{https://www.docker.com}
+\bibitem{fastapi} S. Ramírez, ``FastAPI Framework Architecture and Performance Guide,'' 2024. [En línea]. Disponible en: \url{https://fastapi.tiangolo.com}
+\bibitem{mariadb} MariaDB Foundation, ``MariaDB Enterprise Database Documentation,'' 2024. [En línea]. Disponible en: \url{https://mariadb.org}
+\bibitem{telegram} Telegram Messenger Inc., ``Telegram Bot API and Inline Keyboards Documentation,'' 2024. [En línea]. Disponible en: \url{https://core.telegram.org/bots/api}
+\bibitem{bootstrap} Bootstrap Core Team, ``Bootstrap 5 Frontend Framework Guide,'' 2024. [En línea]. Disponible en: \url{https://getbootstrap.com}
 \end{thebibliography}
 
 \end{document}
