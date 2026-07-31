@@ -1,0 +1,90 @@
+/* Custom Industrial Dark Theme Overrides for Web Admin */
+body {
+    background-color: #0f172a;
+    color: #f8fafc;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.navbar {
+    background-color: #1e293b !important;
+    border-bottom: 1px solid #334155;
+}
+
+.card {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    color: #f8fafc;
+}
+
+.card-header {
+    background-color: #0f172a;
+    border-bottom: 1px solid #334155;
+    font-weight: 600;
+}
+
+.table {
+    color: #f8fafc;
+    border-color: #334155;
+}
+
+.table-dark {
+    --bs-table-bg: #1e293b;
+    --bs-table-border-color: #334155;
+}
+
+.modal-content {
+    background-color: #1e293b;
+    color: #f8fafc;
+    border: 1px solid #475569;
+}
+
+.modal-header, .modal-footer {
+    border-color: #334155;
+}
+
+.form-control, .form-select {
+    background-color: #0f172a;
+    border-color: #475569;
+    color: #f8fafc;
+}
+
+.form-control:focus, .form-select:focus {
+    background-color: #0f172a;
+    color: #f8fafc;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25);
+}
+
+.nav-tabs .nav-link {
+    color: #94a3b8;
+    border: none;
+    font-weight: 500;
+}
+
+.nav-tabs .nav-link.active {
+    color: #38bdf8;
+    background-color: transparent;
+    border-bottom: 2px solid #38bdf8;
+}
+
+.nav-tabs .nav-link:hover {
+    color: #f1f5f9;
+}
+
+.progress {
+    background-color: #0f172a;
+    border: 1px solid #334155;
+}
+
+.badge-activa {
+    background-color: #10b981;
+}
+
+.badge-parada {
+    background-color: #f59e0b;
+}
+
+.badge-emergencia {
+    background-color: #ef4444;
+}

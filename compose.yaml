@@ -67,6 +67,9 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     ports:
       - "8000:8000"
+    volumes:
+      - ./apiiot/templates:/app/templates
+      - ./apiiot/static:/app/static
     depends_on:
       - mariadb
     restart: unless-stopped

@@ -34,31 +34,31 @@ async def operario_callback_handler(update: Update, context: ContextTypes.DEFAUL
         maquinas = await api_client.get_maquinas()
         await safe_edit_or_reply(
             query,
-            "⚙️ **SELECCIONE LA MÁQUINA A LA QUE DESEA ASIGNARSE:**",
+            "**SELECCIONE LA MÁQUINA A LA QUE DESEA ASIGNARSE:**",
             reply_markup=get_maquinas_select_keyboard(maquinas, "asig_maq")
         )
 
     elif data.startswith("asig_maq_"):
         maquina_id = int(data.split("_")[-1])
         if not user_id:
-            await safe_edit_or_reply(query, "❌ Debe estar autenticado como Operario para auto-asignarse. Ejecute `/login_operario <usuario>`")
+            await safe_edit_or_reply(query, "Debe estar autenticado como Operario para auto-asignarse. Ejecute `/login_operario <usuario>`")
             return
 
         res = await api_client.actualizar_asignacion(maquina_id=maquina_id, operario_id=user_id)
         if res and res.get("status") == "ok":
             await safe_edit_or_reply(
                 query,
-                f"✅ **Asignación Exitosa:** Quedó asignado como Operario de la máquina seleccionada.",
+                f"**Asignación Exitosa:** Quedó asignado como Operario de la máquina seleccionada.",
                 reply_markup=get_operario_menu_keyboard()
             )
         else:
-            await safe_edit_or_reply(query, "❌ No se pudo registrar la asignación.", reply_markup=get_operario_menu_keyboard())
+            await safe_edit_or_reply(query, "No se pudo registrar la asignación.", reply_markup=get_operario_menu_keyboard())
 
     elif data == "op_seleccionar_herramienta":
         maquinas = await api_client.get_maquinas()
         await safe_edit_or_reply(
             query,
-            "🔧 **SELECCIONE LA MÁQUINA PARA CAMBIAR HERRAMIENTA:**",
+            "**SELECCIONE LA MÁQUINA PARA CAMBIAR HERRAMIENTA:**",
             reply_markup=get_maquinas_select_keyboard(maquinas, "select_herram_maq")
         )
 
@@ -67,12 +67,12 @@ async def operario_callback_handler(update: Update, context: ContextTypes.DEFAUL
         context.user_data["temp_maquina_id"] = maquina_id
         herramientas = await api_client.get_herramientas(maquina_id=maquina_id)
         if not herramientas:
-            await safe_edit_or_reply(query, "ℹ️ No hay herramientas registradas para esta máquina.", reply_markup=get_operario_menu_keyboard())
+            await safe_edit_or_reply(query, "No hay herramientas registradas para esta máquina.", reply_markup=get_operario_menu_keyboard())
             return
 
         await safe_edit_or_reply(
             query,
-            "🔧 **SELECCIONE LA HERRAMIENTA A INSTALAR:**",
+            "**SELECCIONE LA HERRAMIENTA A INSTALAR:**",
             reply_markup=get_herramientas_select_keyboard(herramientas, "instalar_h")
         )
 
@@ -84,22 +84,22 @@ async def operario_callback_handler(update: Update, context: ContextTypes.DEFAUL
         if res and res.get("status") == "ok":
             await safe_edit_or_reply(
                 query,
-                f"✅ **Herramienta instalada exitosamente en la máquina.**",
+                f"**Herramienta instalada exitosamente en la máquina.**",
                 reply_markup=get_operario_menu_keyboard()
             )
         else:
-            await safe_edit_or_reply(query, "❌ Error al cambiar herramienta.", reply_markup=get_operario_menu_keyboard())
+            await safe_edit_or_reply(query, "Error al cambiar herramienta.", reply_markup=get_operario_menu_keyboard())
 
     elif data == "op_finalizar_actividad":
         activas = await api_client.get_actividades_activas()
         if not activas:
-            await safe_edit_or_reply(query, "ℹ️ No hay sesiones de actividad activas para finalizar.", reply_markup=get_operario_menu_keyboard())
+            await safe_edit_or_reply(query, "No hay sesiones de actividad activas para finalizar.", reply_markup=get_operario_menu_keyboard())
             return
 
         context.user_data["esperando_comentario_actividad_id"] = activas[0]["id"]
         await safe_edit_or_reply(
             query,
-            f"📝 **Finalización de Actividad (ID #{activas[0]['id']})**\n\n"
+            f"**Finalización de Actividad (ID #{activas[0]['id']})**\n\n"
             f"Por favor, envíe un **mensaje de texto** con su comentario u observación sobre la tarea realizada (ej: *'Mecanizado finalizado sin novedad'*):"
         )
 
@@ -114,9 +114,9 @@ async def recibir_comentario_handler(update: Update, context: ContextTypes.DEFAU
 
     if res and res.get("status") == "ok":
         await update.message.reply_text(
-            f"✅ **Actividad #{actividad_id} Finalizada Exitosamente.**\nComentario guardado: _{comentario}_",
+            f"**Actividad #{actividad_id} Finalizada Exitosamente.**\nComentario guardado: _{comentario}_",
             parse_mode="Markdown",
             reply_markup=get_operario_menu_keyboard()
         )
     else:
-        await update.message.reply_text("❌ No se pudo finalizar la actividad.", reply_markup=get_operario_menu_keyboard())
+        await update.message.reply_text("No se pudo finalizar la actividad.", reply_markup=get_operario_menu_keyboard())

@@ -1,20 +1,31 @@
-from fastapi import FastAPI, HTTPException, Query, Body
+from fastapi import FastAPI, HTTPException, Query, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from typing import Optional, List
 import aiomysql
 import os
 import logging
 import httpx
+import csv
+import io
 from datetime import datetime, timedelta
 
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
     title="Industrial Machinery Uptime & KPI API",
-    description="REST API for real-time monitoring of lathes, milling machines, Telegram bot, and activity engine.",
+    description="REST API for real-time monitoring of lathes, milling machines, Telegram bot, Web Admin, and activity engine.",
     version="2.0.0"
 )
+
+# Servir archivos estáticos y plantillas HTML Jinja2 para Web Admin
+os.makedirs("/app/static", exist_ok=True)
+os.makedirs("/app/templates", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 # CORS middleware for Grafana / web dashboards
 app.add_middleware(
@@ -537,3 +548,365 @@ async def simular_evento(evento: EventoSimulacion):
         return {"status": "ok", "mensaje": f"Evento {evento.estado} registrado para {maquina_nombre}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- Web Admin SPA & Activity Fit Endpoints ---
+
+class ActivityMergeRequest(BaseModel):
+    actividad_ids: List[int]
+
+class ActivitySplitRequest(BaseModel):
+    fecha_corte: str
+
+class AssignOperarioRetroactivo(BaseModel):
+    operario_id: int
+
+class ComentarioUpdate(BaseModel):
+    comentario: str
+
+@app.get("/admin", response_class=HTMLResponse)
+async def serve_admin_panel(request: Request):
+    """Servidor HTML del Panel Web Administrador SPA."""
+    return templates.TemplateResponse("admin.html", {"request": request})
+
+@app.get("/api/v1/admin/actividades")
+async def listar_actividades_admin():
+    """Retorna el registro histórico completo de actividades."""
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            sql = """
+                SELECT a.id, a.maquina_id, m.nombre AS maquina, m.tipo AS tipo_maquina,
+                       a.operario_id, u.nombre AS operario_nombre, u.username AS operario_username,
+                       a.herramienta_id, h.nombre AS herramienta_nombre,
+                       a.fecha_inicio, a.fecha_fin, a.tiempo_activo_segundos,
+                       ROUND(a.tiempo_activo_segundos / 3600.0, 2) AS tiempo_activo_horas,
+                       a.estado, a.comentario
+                FROM actividades a
+                JOIN maquinas m ON a.maquina_id = m.id
+                LEFT JOIN usuarios u ON a.operario_id = u.id
+                LEFT JOIN herramientas h ON a.herramienta_id = h.id
+                ORDER BY a.fecha_inicio DESC
+            """
+            await cur.execute(sql)
+            res = await cur.fetchall()
+        conn.close()
+        return {"actividades": res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/admin/actividades/{actividad_id}/asignar-operario")
+async def asignar_operario_retroactivo(actividad_id: int, req: AssignOperarioRetroactivo):
+    """Asigna retroactivamente un operario a una actividad existente."""
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE actividades SET operario_id = %s WHERE id = %s", (req.operario_id, actividad_id))
+        conn.close()
+        return {"status": "ok", "mensaje": f"Operario {req.operario_id} asignado a actividad {actividad_id}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/admin/actividades/merge")
+async def fusionar_actividades(req: ActivityMergeRequest):
+    """Fusiona 2 o más actividades consecutivas en un único registro."""
+    if len(req.actividad_ids) < 2:
+        raise HTTPException(status_code=400, detail="Debe seleccionar al menos 2 actividades para fusionar.")
+
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            ids_str = ",".join(map(str, req.actividad_ids))
+            await cur.execute(f"SELECT * FROM actividades WHERE id IN ({ids_str}) ORDER BY fecha_inicio ASC")
+            rows = await cur.fetchall()
+
+            if len(rows) < len(req.actividad_ids):
+                conn.close()
+                raise HTTPException(status_code=404, detail="Una o más actividades seleccionadas no existen.")
+
+            target_id = rows[0]["id"]
+            min_inicio = rows[0]["fecha_inicio"]
+            max_fin = max(r["fecha_fin"] for r in rows if r["fecha_fin"])
+            total_segundos = sum(r["tiempo_activo_segundos"] or 0 for r in rows)
+            
+            await cur.execute(
+                """UPDATE actividades 
+                   SET fecha_inicio = %s, fecha_fin = %s, tiempo_activo_segundos = %s, estado = 'FINALIZADA', comentario = 'Fusionada retroactivamente'
+                   WHERE id = %s""",
+                (min_inicio, max_fin, total_segundos, target_id)
+            )
+
+            other_ids = [r["id"] for r in rows if r["id"] != target_id]
+            if other_ids:
+                other_str = ",".join(map(str, other_ids))
+                await cur.execute(f"DELETE FROM actividades WHERE id IN ({other_str})")
+
+        conn.close()
+        return {"status": "ok", "mensaje": f"Actividades fusionadas exitosamente en la actividad #{target_id}."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/admin/actividades/{actividad_id}/split")
+async def dividir_actividad(actividad_id: int, req: ActivitySplitRequest):
+    """Divide una actividad en dos fragmentos utilizando una fecha/hora de corte."""
+    try:
+        corte_dt = datetime.strptime(req.fecha_corte, "%Y-%m-%d %H:%M:%S")
+        conn = await get_db_connection()
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute("SELECT * FROM actividades WHERE id = %s", (actividad_id,))
+            act = await cur.fetchone()
+            if not act:
+                conn.close()
+                raise HTTPException(status_code=404, detail="Actividad no encontrada.")
+
+            inicio = act["fecha_inicio"]
+            fin = act["fecha_fin"] or datetime.now()
+
+            if corte_dt <= inicio or corte_dt >= fin:
+                conn.close()
+                raise HTTPException(status_code=400, detail="La fecha de corte debe estar dentro del rango de la actividad.")
+
+            t1_seg = int((corte_dt - inicio).total_seconds())
+            t2_seg = int((fin - corte_dt).total_seconds())
+
+            await cur.execute(
+                """UPDATE actividades SET fecha_fin = %s, tiempo_activo_segundos = %s, comentario = 'Dividida (Fragmento 1)' WHERE id = %s""",
+                (corte_dt, t1_seg, actividad_id)
+            )
+
+            await cur.execute(
+                """INSERT INTO actividades (maquina_id, operario_id, herramienta_id, fecha_inicio, fecha_fin, tiempo_activo_segundos, estado, comentario)
+                   VALUES (%s, %s, %s, %s, %s, %s, 'FINALIZADA', 'Dividida (Fragmento 2)')""",
+                (act["maquina_id"], act["operario_id"], act["herramienta_id"], corte_dt, fin, t2_seg)
+            )
+            new_id = cur.lastrowid
+
+        conn.close()
+        return {"status": "ok", "mensaje": f"Actividad #{actividad_id} dividida exitosamente. Nuevo fragmento ID #{new_id}."}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use 'YYYY-MM-DD HH:MM:SS'.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/v1/admin/actividades/{actividad_id}/comentario")
+async def actualizar_comentario_actividad(actividad_id: int, req: ComentarioUpdate):
+    """Actualiza o agrega un comentario a una actividad."""
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE actividades SET comentario = %s WHERE id = %s", (req.comentario, actividad_id))
+        conn.close()
+        return {"status": "ok", "mensaje": "Comentario actualizado correctamente."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/admin/informes/exportar-csv")
+async def exportar_informe_csv():
+    """Genera y retorna un archivo CSV con el historial de actividades."""
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            sql = """
+                SELECT a.id, m.nombre AS maquina, u.nombre AS operario, h.nombre AS herramienta,
+                       a.fecha_inicio, a.fecha_fin, ROUND(a.tiempo_activo_segundos/3600.0, 2) AS horas_activas,
+                       a.estado, a.comentario
+                FROM actividades a
+                JOIN maquinas m ON a.maquina_id = m.id
+                LEFT JOIN usuarios u ON a.operario_id = u.id
+                LEFT JOIN herramientas h ON a.herramienta_id = h.id
+                ORDER BY a.fecha_inicio DESC
+            """
+            await cur.execute(sql)
+            rows = await cur.fetchall()
+        conn.close()
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["ID", "Maquina", "Operario", "Herramienta", "Fecha Inicio", "Fecha Fin", "Horas Activas", "Estado", "Comentario"])
+
+        for r in rows:
+            writer.writerow([
+                r["id"], r["maquina"], r["operario"] or "Sin Operario", r["herramienta"] or "Sin Herramienta",
+                r["fecha_inicio"], r["fecha_fin"], r["horas_activas"], r["estado"], r["comentario"] or ""
+            ])
+
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=informe_produccion.csv"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Endpoints de Gráficos Estadísticos Matplotlib para Web Admin ---
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+plt.style.use('dark_background')
+
+@app.get("/api/v1/admin/usuarios/{usuario_id}/grafico-stats")
+async def grafico_stats_operario(usuario_id: int):
+    """Genera un gráfico de barras Seaborn/Matplotlib con el rendimiento semanal por turno del operario."""
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute("SELECT nombre, username FROM usuarios WHERE id = %s", (usuario_id,))
+            user = await cur.fetchone()
+
+            sql = """
+                SELECT a.fecha_inicio, m.nombre AS maquina,
+                       ROUND(a.tiempo_activo_segundos / 3600.0, 2) AS horas_activas,
+                       CASE 
+                           WHEN HOUR(a.fecha_inicio) BETWEEN 6 AND 13 THEN 'Mañana'
+                           WHEN HOUR(a.fecha_inicio) BETWEEN 14 AND 21 THEN 'Tarde'
+                           ELSE 'Noche'
+                       END AS turno
+                FROM actividades a
+                JOIN maquinas m ON a.maquina_id = m.id
+                WHERE a.operario_id = %s
+                ORDER BY a.fecha_inicio DESC
+            """
+            await cur.execute(sql, (usuario_id,))
+            actividades = await cur.fetchall()
+        conn.close()
+
+        fig, ax = plt.subplots(figsize=(7.5, 4), dpi=130)
+        fig.patch.set_facecolor('#1e293b')
+        ax.set_facecolor('#0f172a')
+
+        if not actividades:
+            ax.text(0.5, 0.5, 'Sin actividades registradas para este operario', ha='center', va='center', color='#94a3b8', fontsize=11)
+            ax.axis('off')
+        else:
+            shifts = {}
+            for a in actividades:
+                fecha_fmt = a['fecha_inicio'].strftime('%d/%m') if hasattr(a['fecha_inicio'], 'strftime') else str(a['fecha_inicio'])[:10]
+                lbl = f"{fecha_fmt}\nTurno {a['turno']}\n({a['maquina']})"
+                shifts[lbl] = shifts.get(lbl, 0.0) + float(a['horas_activas'])
+
+            labels = list(shifts.keys())
+            horas = list(shifts.values())
+            colors = ['#38bdf8' if 'Torno' in l else '#34d399' for l in labels]
+
+            bars = ax.bar(labels, horas, color=colors, edgecolor='#475569', width=0.45)
+            ax.set_ylabel('Horas Operativas (hs)', color='#f8fafc', fontsize=10, fontweight='bold')
+            nombre_user = user['nombre'] if user else f'Operario #{usuario_id}'
+            ax.set_title(f'Rendimiento Semanal por Turno - {nombre_user}', color='#38bdf8', fontsize=11, fontweight='bold', pad=12)
+            ax.grid(axis='y', color='#334155', linestyle='--', alpha=0.5)
+            ax.tick_params(colors='#f8fafc', labelsize=8)
+
+            for bar in bars:
+                h = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., h + 0.05, f"{h:.2f} hs", ha='center', va='bottom', color='#f8fafc', fontsize=8, fontweight='bold')
+
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', facecolor=fig.get_facecolor(), edgecolor='none')
+        plt.close(fig)
+        buf.seek(0)
+        return Response(content=buf.getvalue(), media_type="image/png")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/admin/informes/grafico-turno")
+async def grafico_turno_admin():
+    """Genera un gráfico de barras horizontales de horas operativas por día y máquina (últimos 7 días)."""
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            sql = """
+                SELECT DATE(fecha_inicio) AS fecha, m.nombre AS maquina,
+                       ROUND(SUM(tiempo_activo_segundos)/3600.0, 2) AS horas_activas
+                FROM actividades a
+                JOIN maquinas m ON a.maquina_id = m.id
+                WHERE fecha_inicio >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                GROUP BY DATE(fecha_inicio), m.nombre
+                ORDER BY fecha ASC, maquina ASC
+            """
+            await cur.execute(sql)
+            rows = await cur.fetchall()
+        conn.close()
+
+        fig, ax = plt.subplots(figsize=(8, 4), dpi=130)
+        fig.patch.set_facecolor('#1e293b')
+        ax.set_facecolor('#0f172a')
+
+        if not rows:
+            ax.text(0.5, 0.5, 'Sin registros en los últimos 7 días', ha='center', va='center', color='#94a3b8', fontsize=11)
+            ax.axis('off')
+        else:
+            labels = [f"{r['fecha']}\n({r['maquina']})" for r in rows]
+            horas = [float(r['horas_activas']) for r in rows]
+            colors = ['#38bdf8' if 'Torno' in l else '#34d399' for l in labels]
+
+            bars = ax.barh(labels, horas, color=colors, edgecolor='#475569', height=0.5)
+            ax.set_xlabel('Horas Operativas (hs)', color='#f8fafc', fontsize=10, fontweight='bold')
+            ax.set_title('Horas Operativas por Día y Máquina (Últimos 7 Días)', color='#38bdf8', fontsize=11, fontweight='bold', pad=12)
+            ax.grid(axis='x', color='#334155', linestyle='--', alpha=0.5)
+            ax.tick_params(colors='#f8fafc', labelsize=8)
+
+            for bar in bars:
+                w = bar.get_width()
+                ax.text(w + 0.1, bar.get_y() + bar.get_height()/2, f"{w:.2f} hs", va='center', ha='left', color='#f8fafc', fontsize=8, fontweight='bold')
+
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', facecolor=fig.get_facecolor(), edgecolor='none')
+        plt.close(fig)
+        buf.seek(0)
+        return Response(content=buf.getvalue(), media_type="image/png")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/admin/informes/grafico-semana")
+async def grafico_semana_admin():
+    """Genera un gráfico donut de distribución semanal por máquina."""
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            sql = """
+                SELECT m.nombre AS maquina, ROUND(SUM(tiempo_activo_segundos)/3600.0, 2) AS total_horas_activas
+                FROM actividades a
+                JOIN maquinas m ON a.maquina_id = m.id
+                WHERE fecha_inicio >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                GROUP BY m.nombre
+            """
+            await cur.execute(sql)
+            rows = await cur.fetchall()
+        conn.close()
+
+        fig, ax = plt.subplots(figsize=(7, 4), dpi=130)
+        fig.patch.set_facecolor('#1e293b')
+        ax.set_facecolor('#0f172a')
+
+        if not rows:
+            ax.text(0.5, 0.5, 'Sin datos semanales', ha='center', va='center', color='#94a3b8', fontsize=11)
+            ax.axis('off')
+        else:
+            labels = [r['maquina'] for r in rows]
+            horas = [float(r['total_horas_activas']) for r in rows]
+            colors = ['#38bdf8', '#34d399', '#f59e0b', '#fb7185']
+
+            wedges, texts, autotexts = ax.pie(
+                horas, labels=labels, autopct='%1.1f%%',
+                startangle=140, colors=colors[:len(labels)],
+                wedgeprops=dict(width=0.4, edgecolor='#1e293b', linewidth=2),
+                textprops=dict(color='#f8fafc', fontsize=9, fontweight='bold')
+            )
+            for autotext in autotexts:
+                autotext.set_color('#0f172a')
+                autotext.set_weight('bold')
+
+            ax.set_title('Distribución Semanal de Uso por Máquina', color='#38bdf8', fontsize=11, fontweight='bold', pad=12)
+
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', facecolor=fig.get_facecolor(), edgecolor='none')
+        plt.close(fig)
+        buf.seek(0)
+        return Response(content=buf.getvalue(), media_type="image/png")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
