@@ -1,7 +1,8 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage[spanish,es-tabla]{babel}
 \usepackage[utf8]{inputenc}
-\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage[a4paper, top=2.5cm, bottom=1.5cm, left=2.5cm, right=1.5cm]{geometry}
+\usepackage{mathptmx} % Times New Roman font as required by JIDeTEV
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
 \usepackage{booktabs}
@@ -11,8 +12,12 @@
 \usepackage{tikz}
 \usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds, calc, babel}
 \usepackage{hyperref}
-\usepackage{setspace}
-\onehalfspacing
+\usepackage{caption}
+
+% Line spacing 1.15 and paragraph indent 5mm according to JIDeTEV format
+\linespread{1.15}
+\setlength{\parindent}{0.5cm}
+\setlength{\parskip}{0pt}
 
 \hypersetup{
     colorlinks=true,
@@ -21,31 +26,34 @@
     urlcolor=blue
 }
 
-\title{\Huge \textbf{Sistema IoT Industrial Escalable y de Bajo Costo para la Monitorización de Tiempos de Actividad en Maquinaria Industrial}\\ \Large \vspace{0.4cm} Arquitectura de Servidor, Motor de Actividades Automatizado e Interfaces Duales de Gestión}
-
-\author{
-\textbf{Hernán F. Kisiel$^1$, Germán A. Xander$^2$, Luis A. Urbani$^3$, Alejandro G. Maxit$^4$}\\[0.3cm]
-\small Universidad Nacional de Misiones, Facultad de Ingeniería\\
-\small Oberá, Misiones, Argentina\\[0.1cm]
-\small E-mails: \href{mailto:hernankisiel@gmail.com}{hernankisiel@gmail.com}, \href{mailto:german.xander@fio.unam.edu.ar}{german.xander@fio.unam.edu.ar},\\
-\small \href{mailto:ctt.urbani@gmail.com}{ctt.urbani@gmail.com}, \href{mailto:alejandro.maxit@fio.unam.edu.ar}{alejandro.maxit@fio.unam.edu.ar}
-}
-
-\date{\today}
+% Caption styling according to JIDeTEV guidelines
+\captionsetup[table]{labelsep=period, justification=centering, font=small, labelfont=bf}
+\captionsetup[figure]{labelsep=period, justification=centering, font=small, labelfont=bf}
 
 \begin{document}
 
-\maketitle
+% Title Block - JIDeTEV Guidelines (18pt Bold Title, 12pt Authors, Centered)
+\begin{center}
+    {\LARGE \bfseries Sistema IoT Industrial Escalable y de Bajo Costo para la Monitorización de Tiempos de Actividad en Maquinaria Industrial}\\[0.3cm]
+    {\Large \bfseries Arquitectura de Servidor, Motor de Actividades Automatizado e Interfaces Duales de Gestión}\\[0.5cm]
+    
+    {\large Hernán F. Kisiel$^{a,*}$, Germán A. Xander$^b$, Luis A. Urbani$^a$, Alejandro G. Maxit$^b$}\\[0.3cm]
+    
+    {\small $^a$ Universidad Nacional de Misiones (UNaM). Facultad de Ingeniería. Dpto. de Ing. Industrial. Oberá, Misiones, Argentina.}\\[0.1cm]
+    {\small $^b$ Universidad Nacional de Misiones (UNaM). Facultad de Ingeniería. Grupo de Investigación y Desarrollo en Electrónica (GIDE). Oberá, Misiones, Argentina.}\\[0.2cm]
+    {\small e-mails: \href{mailto:hernankisiel@gmail.com}{hernankisiel@gmail.com}, \href{mailto:german.xander@fio.unam.edu.ar}{german.xander@fio.unam.edu.ar}, \href{mailto:ctt.urbani@gmail.com}{ctt.urbani@gmail.com}, \href{mailto:alejandro.maxit@fio.unam.edu.ar}{alejandro.maxit@fio.unam.edu.ar}}\\[0.4cm]
+\end{center}
 
 \begin{abstract}
-\noindent En la era de la Industria 4.0, la digitalización de plantas de producción con maquinaria convencional representa un desafío crítico para las pequeñas y medianas empresas (PyMEs) debido a los elevados costos de inversión en sistemas SCADA o plataformas MES propietarias. Este artículo presenta la investigación, diseño e implementación end-to-end de un sistema de Internet de las Cosas (IoT) industrial de bajo costo, fácil instalación, alta usabilidad y arquitectura fuertemente escalable. La captura de eventos operativos se realiza en el borde mediante un módulo sensor no invasivo con aislamiento galvánico optoelectrónico conectado a los contactores de 24V de maquinaria electromecánica (torno y fresadora), procesado por microcontroladores ESP32 y transmitido vía MQTT. Toda la infraestructura de servidor se despliega mediante contenedores Docker orquestados con Docker Compose, integrando un proxy inverso SWAG (Nginx HTTPS), un broker MQTT Mosquitto, un servicio de ingesta en Python, MariaDB, una API REST en FastAPI, un Bot conversacional en Telegram 2.0 y una aplicación web SPA en HTML5/Bootstrap 5. Se destaca el desarrollo de un motor de actividades automatizado capaz de consolidar la telemetría en sesiones continuas de trabajo, gestionar temporizadores de inactividad, calcular el desgaste acumulado de herramientas y proveer herramientas de ajuste retroactivo (Merge y Split). El sistema fue validado en planta acumulando 30 días de funcionamiento continuo con 134 actividades generadas, demostrando ser una solución robusta y accesible para la supervisión industrial.
+\noindent \textbf{Resumen}-- En la era de la Industria 4.0, la digitalización de plantas de producción con maquinaria convencional representa un desafío crítico para las pequeñas y medianas empresas (PyMEs) debido a los elevados costos de inversión en sistemas SCADA o plataformas MES propietarias. Este artículo presenta la investigación, diseño e implementación end-to-end de un sistema de Internet de las Cosas (IoT) industrial de bajo costo, fácil instalación, alta usabilidad y arquitectura fuertemente escalable. La captura de eventos operativos se realiza en el borde mediante un módulo sensor no invasivo con aislamiento galvánico optoelectrónico conectado a los contactores de 24V de maquinaria electromecánica (torno y fresadora), procesado por microcontroladores ESP32 y transmitido vía MQTT. Toda la infraestructura de servidor se despliega mediante contenedores Docker orquestados con Docker Compose, integrando un proxy inverso SWAG (Nginx HTTPS), un broker MQTT Mosquitto, un servicio de ingesta en Python, MariaDB, una API REST en FastAPI, un Bot conversacional en Telegram 2.0 y una aplicación web SPA en HTML5/Bootstrap 5. Se destaca el desarrollo de un motor de actividades automatizado capaz de consolidar la telemetría en sesiones continuas de trabajo, gestionar temporizadores de inactividad, calcular el desgaste acumulado de herramientas y proveer herramientas de ajuste retroactivo (Merge y Split). El sistema fue validado en planta acumulando 30 días de funcionamiento continuo con 134 actividades generadas, demostrando ser una solución robusta y accesible para la supervisión industrial.
 \end{abstract}
 
-\textbf{Palabras Clave:} IoT Industrial, ESP32, Arquitectura de Servidor, FastAPI, Docker, MQTT, Telegram Bot, Web Admin SPA, Industria 4.0, Gestión de Maquinaria.
+\vspace{0.2cm}
+\noindent \textbf{Palabras Clave} -- Actividades automatizadas, Arquitectura de servidor, Docker, ESP32, FastAPI, Industria 4.0, IoT Industrial, MariaDB, MQTT, Telegram Bot.
 
-\newpage
+\vspace{0.5cm}
 
-\section{Introducción y Planteamiento del Problema}
+\section{Introducción}
 
 En las pequeñas y medianas empresas (PyMEs) del sector metalúrgico, la eficiencia global de los equipos (OEE) y la optimización de los costos operativos dependen de manera directa de la maximización del tiempo de uso efectivo de maquinaria crítica, como tornos, fresadoras y rectificadoras. Sin embargo, la gestión de la producción en estas plantas suele caracterizarse por una marcada falta de visibilidad en tiempo real. Tradicionalmente, la supervisión de los tiempos de parada y de trabajo se ha basado en la presencia física continua del supervisor o en planillas manuales completadas por los propios operarios al finalizar la jornada. Estos métodos convencionales presentan deficiencias estructurales: son propensos a sesgos humanos, inconsistencias temporales, pérdidas de datos y retrasos significativos en la detección de ineficiencias o averías.
 
@@ -101,13 +109,13 @@ La infraestructura se compone de ocho microservicios desacoplados que ejecutan d
 \begin{figure}[htbp]
 \centering
 \shorthandoff{<>}
-\begin{tikzpicture}[node distance=1.1cm and 1.2cm, auto, >=Stealth, font=\sffamily\small, scale=0.88, transform shape]
+\begin{tikzpicture}[node distance=1.0cm and 1.2cm, auto, >=Stealth, font=\sffamily\small, scale=0.88, transform shape]
     % Styles
-    \tikzstyle{edgeNode} = [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\bfseries\small]
-    \tikzstyle{brokerNode} = [rectangle, draw=green!70, fill=green!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\bfseries\small]
-    \tikzstyle{dbNode} = [cylinder, draw=orange!70, fill=orange!10, shape border rotate=90, minimum width=2.6cm, minimum height=1.2cm, align=center, font=\bfseries\small]
-    \tikzstyle{serverNode} = [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\bfseries\small]
-    \tikzstyle{uiNode} = [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\bfseries\small]
+    \tikzstyle{edgeNode} = [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=3.2cm, minimum height=1.1cm, align=center, font=\bfseries\small]
+    \tikzstyle{brokerNode} = [rectangle, draw=green!70, fill=green!10, rounded corners, minimum width=3.2cm, minimum height=1.1cm, align=center, font=\bfseries\small]
+    \tikzstyle{dbNode} = [cylinder, draw=orange!70, fill=orange!10, shape border rotate=90, minimum width=3.0cm, minimum height=1.3cm, align=center, font=\bfseries\small]
+    \tikzstyle{serverNode} = [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=3.2cm, minimum height=1.1cm, align=center, font=\bfseries\small]
+    \tikzstyle{uiNode} = [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=3.2cm, minimum height=1.1cm, align=center, font=\bfseries\small]
     
     % Nodes
     \node (torno) [edgeNode] {ESP32 Edge\\(Torno 1)};
@@ -118,7 +126,7 @@ La infraestructura se compone de ocho microservicios desacoplados que ejecutan d
     \node (db) [dbNode, right=1.6cm of ingest] {MariaDB Database\\(\texttt{metalurgica\_db})};
     
     \node (api) [serverNode, below=1.8cm of db] {FastAPI Backend\\(API IoT REST Engine)};
-    \node (web) [uiNode, left=1.6cm of api] {Panel Web Admin\\(HTML5 / SPA)};
+    \node (web) [uiNode, left=1.6cm of api] {Panel Web Admin\\(HTML5 / Bootstrap 5)};
     \node (bot) [uiNode, left=1.6cm of web] {Bot Telegram 2.0\\(\texttt{@Kisiel\_iot\_bot})};
     \node (grafana) [uiNode, below=0.8cm of web] {Grafana Dashboards\\(Visualización KPIs)};
     
@@ -165,10 +173,10 @@ El algoritmo de consolidación opera bajo las siguientes reglas de transición:
 \begin{figure}[htbp]
 \centering
 \shorthandoff{<>}
-\begin{tikzpicture}[node distance=2.2cm, auto, >=Stealth, font=\sffamily\small]
+\begin{tikzpicture}[node distance=2.2cm, auto, >=Stealth, font=\sffamily\small, scale=0.92, transform shape]
     \node (start) [circle, draw=black, fill=black, inner sep=3pt] {};
-    \node (encurso) [rectangle, draw=green!70, fill=green!10, rounded corners, minimum width=3.0cm, minimum height=1.2cm, right=1.5cm of start, align=center, font=\bfseries\small] {EN\_CURSO\\(Acumulando tiempo)};
-    \node (finalizada) [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=3.0cm, minimum height=1.2cm, right=2.8cm of encurso, align=center, font=\bfseries\small] {FINALIZADA\\(Sesión cerrada)};
+    \node (encurso) [rectangle, draw=green!70, fill=green!10, rounded corners, minimum width=3.0cm, minimum height=1.2cm, right=1.4cm of start, align=center, font=\bfseries\small] {EN\_CURSO\\(Acumulando tiempo)};
+    \node (finalizada) [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=3.0cm, minimum height=1.2cm, right=2.6cm of encurso, align=center, font=\bfseries\small] {FINALIZADA\\(Sesión cerrada)};
     \node (emergencia) [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=3.2cm, minimum height=1.2cm, below=1.8cm of $(encurso.east)!0.5!(finalizada.west)$, align=center, font=\bfseries\small] {PARADA\_EMERGENCIA\\(Alerta en vivo dispatched)};
 
     \draw[->, thick, line width=1.2pt] (start) -- node[above, font=\tiny\bfseries]{Evento ACTIVA} (encurso);
@@ -194,16 +202,16 @@ En la práctica industrial real, ocurren situaciones atípicas: un operario pued
 
 La persistencia de datos del sistema está encomendada a MariaDB mediante la base de datos \texttt{metalurgica\_db}. El modelo entidad-relación ha sido diseñado bajo principios de normalización para asegurar la coherencia de los datos y optimizar la velocidad de respuesta en consultas de tableros de control.
 
-El esquema relacional consta de ocho tablas principales interconectadas mediante claves foráneas y restricciones de integridad referencial, detalladas en la Tabla~\ref{tab:esquema_bd}.
+El esquema relacional consta de ocho tablas principales interconectadas mediante claves foráneas y restricciones de integridad referencial, detalladas en la Tabla 1.
 
 \begin{table}[htbp]
 \caption{Especificación Detallada del Esquema Relacional de Base de Datos (\texttt{metalurgica\_db})}
 \label{tab:esquema_bd}
 \centering
 \small
-\begin{tabular}{lllp{6.2cm}}
+\begin{tabular}{lllp{6.8cm}}
 \toprule
-\textbf{Tabla} & \textbf{Clave Primaria} & \textbf{Claves Foráneas} & \textbf{Propósito Operativo y Campos} \\
+\textbf{Tabla} & \textbf{Clave Primaria} & \textbf{Claves Foráneas} & \textbf{Propósito Operativo y Campos Principales} \\
 \midrule
 \texttt{maquinas} & \texttt{id} (INT) & N/A & Registro inventariado de activos. Campos: \texttt{nombre}, \texttt{tipo}, \texttt{ubicacion}. \\
 \addlinespace
@@ -257,11 +265,11 @@ Las características principales del Bot 2.0 son:
 \begin{figure}[htbp]
 \centering
 \shorthandoff{<>}
-\begin{tikzpicture}[node distance=1.8cm, auto, >=Stealth, font=\sffamily\small]
+\begin{tikzpicture}[node distance=1.6cm, auto, >=Stealth, font=\sffamily\small, scale=0.92, transform shape]
     \node (op) [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\bfseries\small] {Operario en Planta};
-    \node (bot) [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, below=1.2cm of op, align=center, font=\bfseries\small] {Bot Telegram 2.0\\(\texttt{@Kisiel\_iot\_bot})};
-    \node (api) [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, below=1.2cm of bot, align=center, font=\bfseries\small] {FastAPI Backend\\(API IoT / REST Engine)};
-    \node (admin) [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, right=2.0cm of api, align=center, font=\bfseries\small] {Panel Web Admin\\(HTML5 / Bootstrap SPA)};
+    \node (bot) [rectangle, draw=blue!70, fill=blue!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, below=1.1cm of op, align=center, font=\bfseries\small] {Bot Telegram 2.0\\(\texttt{@Kisiel\_iot\_bot})};
+    \node (api) [rectangle, draw=red!70, fill=red!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, below=1.1cm of bot, align=center, font=\bfseries\small] {FastAPI Backend\\(API IoT / REST Engine)};
+    \node (admin) [rectangle, draw=purple!70, fill=purple!10, rounded corners, minimum width=2.8cm, minimum height=1.0cm, right=1.8cm of api, align=center, font=\bfseries\small] {Panel Web Admin\\(HTML5 / Bootstrap SPA)};
 
     \draw[<->, thick, line width=1.2pt] (op) -- node[right, font=\tiny\bfseries]{Botoneras Inline Keyboards} (bot);
     \draw[<->, thick, line width=1.2pt] (bot) -- node[right, font=\tiny\bfseries]{Requests HTTPS REST / JSON} (api);
