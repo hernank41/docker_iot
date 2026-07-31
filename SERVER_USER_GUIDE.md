@@ -33,44 +33,47 @@ The ingestion worker (`clientemqtt`) subscribes to the wildcard topic pattern:
 `industrial/metalurgica/+/estado`
 
 ### Target Topics
-- **Lathe (Torno Pinacho):** `industrial/metalurgica/torno/estado`
-- **Milling Machine (Fresadora Universal):** `industrial/metalurgica/fresadora/estado`
+- **Lathe (Torno 1):** `industrial/metalurgica/torno_1/estado`
+- **Milling Machine (Fresadora 1):** `industrial/metalurgica/fresadora_1/estado`
+
+> **Note on Timestamps & ESP Payloads:** Timestamps are generated **server-side** automatically upon message arrival (via MariaDB `CURRENT_TIMESTAMP`). The ESP microcontrollers only need to send the machine `estado`.
 
 ### Telemetry JSON Payload Format
 
 #### Machine Started (`ACTIVA`)
 ```json
 {
-  "device_id": "esp32_torno_01",
-  "maquina": "Torno_Pinacho",
+  "maquina": "Torno_1",
   "estado": "ACTIVA",
   "codigo_estado": 1,
-  "causa": "PULSADOR_ARRANQUE",
-  "timestamp_ms": 1722283200000
+  "causa": "PULSADOR_ARRANQUE"
+}
+```
+
+#### Minimal ESP Payload (Name & State inferred from topic & status)
+```json
+{
+  "estado": "ACTIVA"
 }
 ```
 
 #### Machine Stopped (`PARADA`)
 ```json
 {
-  "device_id": "esp32_torno_01",
-  "maquina": "Torno_Pinacho",
+  "maquina": "Torno_1",
   "estado": "PARADA",
   "codigo_estado": 0,
-  "causa": "PULSADOR_PARADA",
-  "timestamp_ms": 1722283260000
+  "causa": "PULSADOR_PARADA"
 }
 ```
 
 #### Emergency Stop (`PARADA_EMERGENCIA`)
 ```json
 {
-  "device_id": "esp32_fresadora_01",
-  "maquina": "Fresadora_Universal",
+  "maquina": "Fresadora_1",
   "estado": "PARADA_EMERGENCIA",
   "codigo_estado": 0,
-  "causa": "PARADA_EMERGENCIA_HABILITADA",
-  "timestamp_ms": 1722283300000
+  "causa": "PARADA_EMERGENCIA_HABILITADA"
 }
 ```
 
@@ -81,10 +84,10 @@ The ingestion worker (`clientemqtt`) subscribes to the wildcard topic pattern:
 #### Option A: Using `mosquitto_pub` CLI
 ```bash
 # Publish Lathe Start event
-mosquitto_pub -h localhost -p 1883 -t "industrial/metalurgica/torno/estado" -m "{\"device_id\":\"esp32_torno_01\",\"maquina\":\"Torno_Pinacho\",\"estado\":\"ACTIVA\",\"codigo_estado\":1,\"causa\":\"PULSADOR_ARRANQUE\"}"
+mosquitto_pub -h localhost -p 1883 -t "industrial/metalurgica/torno_1/estado" -m "{\"maquina\":\"Torno_1\",\"estado\":\"ACTIVA\",\"codigo_estado\":1,\"causa\":\"PULSADOR_ARRANQUE\"}"
 
 # Publish Milling Machine Stop event
-mosquitto_pub -h localhost -p 1883 -t "industrial/metalurgica/fresadora/estado" -m "{\"device_id\":\"esp32_fresadora_01\",\"maquina\":\"Fresadora_Universal\",\"estado\":\"PARADA\",\"codigo_estado\":0,\"causa\":\"SELECTOR_PARADA\"}"
+mosquitto_pub -h localhost -p 1883 -t "industrial/metalurgica/fresadora_1/estado" -m "{\"maquina\":\"Fresadora_1\",\"estado\":\"PARADA\",\"codigo_estado\":0,\"causa\":\"SELECTOR_PARADA\"}"
 ```
 
 #### Option B: Using Python (`paho-mqtt` or `aiomqtt`)
@@ -96,14 +99,13 @@ client = mqtt.Client()
 client.connect("localhost", 1883, 60)
 
 payload = {
-    "device_id": "esp32_torno_01",
-    "maquina": "Torno_Pinacho",
+    "maquina": "Torno_1",
     "estado": "ACTIVA",
     "codigo_estado": 1,
     "causa": "PULSADOR_ARRANQUE"
 }
 
-client.publish("industrial/metalurgica/torno/estado", json.dumps(payload))
+client.publish("industrial/metalurgica/torno_1/estado", json.dumps(payload))
 client.disconnect()
 ```
 
@@ -112,7 +114,7 @@ You can also simulate an event directly using HTTP without an MQTT client:
 ```bash
 curl -X POST "http://localhost:8000/api/v1/simular-evento" \
   -H "Content-Type: application/json" \
-  -d '{"maquina": "Torno_Pinacho", "estado": "ACTIVA", "codigo_estado": 1, "causa": "PULSADOR_ARRANQUE"}'
+  -d '{"maquina": "Torno_1", "estado": "ACTIVA", "codigo_estado": 1, "causa": "PULSADOR_ARRANQUE"}'
 ```
 
 ---
@@ -232,7 +234,7 @@ The relational schema in [schema.sql](file:///c:/Users/Kisiel/Desktop/iot_2026/d
 
 1. **`maquinas` (Dimension Table):**
    - **`id`** (`INT PRIMARY KEY AUTO_INCREMENT`): Unique numeric machine ID.
-   - **`nombre`** (`VARCHAR(50) UNIQUE`): Human-readable machine name (e.g. `Torno_Pinacho`, `Fresadora_Universal`).
+   - **`nombre`** (`VARCHAR(50) UNIQUE`): Human-readable machine name (e.g. `Torno_1`, `Fresadora_1`).
    - **`tipo`** (`VARCHAR(50)`): Type of machine (`Torno`, `Fresadora`).
    - **`ubicacion`** (`VARCHAR(100)`): Plant section location.
 

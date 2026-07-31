@@ -46,9 +46,11 @@ services:
       - MARIADB_DB=${MARIADB_DB}
       - MQTT_USR=${MQTT_USR}
       - MQTT_PASS=${MQTT_PASS}
+      - API_URL=${API_URL}
     depends_on:
       - mariadb
       - mosquitto
+      - apiiot
     restart: unless-stopped
 
   apiiot:
@@ -61,9 +63,27 @@ services:
       - MARIADB_USER=${MARIADB_USER}
       - MARIADB_USER_PASS=${MARIADB_USER_PASS}
       - MARIADB_DB=${MARIADB_DB}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     ports:
       - "8000:8000"
     depends_on:
+      - mariadb
+    restart: unless-stopped
+
+  telegrambot:
+    build:
+      context: ./telegrambot
+    image: telegrambot_industrial
+    container_name: telegrambot
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_BOT_NAME=${TELEGRAM_BOT_NAME}
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - API_URL=${API_URL}
+    depends_on:
+      - apiiot
       - mariadb
     restart: unless-stopped
 
