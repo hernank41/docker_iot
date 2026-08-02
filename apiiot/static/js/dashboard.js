@@ -19,6 +19,41 @@ function initNavigation() {
     });
 }
 
+// 0. Autenticación Web Admin
+async function iniciarSesionWeb(e) {
+    e.preventDefault();
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value.trim();
+    const errorDiv = document.getElementById('login-error');
+
+    try {
+        const res = await fetch('/api/v1/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+            window.location.reload();
+        } else {
+            errorDiv.innerText = data.detail || "Usuario o contraseña de Administrador incorrectos.";
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (err) {
+        errorDiv.innerText = "Error al conectar con el servidor.";
+        errorDiv.classList.remove('d-none');
+    }
+}
+
+async function cerrarSesionWeb() {
+    try {
+        await fetch('/api/v1/admin/logout', { method: 'POST' });
+        window.location.reload();
+    } catch (e) {
+        window.location.reload();
+    }
+}
+
 // 1. Dashboard Monitoreo en Tiempo Real
 async function loadDashboardData() {
     try {
@@ -27,7 +62,7 @@ async function loadDashboardData() {
         if (!container) return;
 
         let html = '';
-        data.estado_maquinas.forEach(m => {
+        data.maquinas.forEach(m => {
             const isActiva = m.estado === 'ACTIVA';
             const isEmergencia = m.estado === 'PARADA_EMERGENCIA';
             const badgeClass = isActiva ? 'bg-success' : (isEmergencia ? 'bg-danger' : 'bg-warning text-dark');
@@ -77,7 +112,7 @@ async function loadOperarios() {
                     <td>${telegramBadge}</td>
                     <td>
                         <button class="btn btn-sm btn-outline-info me-1" onclick="verStatsOperario(${u.id}, '${u.nombre}')">Ver Gráfico Stats</button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="eliminarOperario(${u.id})">Desactivar</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="eliminarOperario(${u.id})">Eliminar</button>
                     </td>
                 </tr>
             `;
@@ -104,12 +139,12 @@ async function guardarNuevoOperario() {
 }
 
 async function eliminarOperario(id) {
-    if (!confirm("¿Desea desactivar este operario?")) return;
+    if (!confirm("¿Desea eliminar permanentemente este operario?")) return;
     try {
         await API.delete(`/api/v1/usuarios/${id}`);
         loadOperarios();
     } catch (e) {
-        alert("Error al desactivar operario.");
+        alert("Error al eliminar operario.");
     }
 }
 
@@ -123,7 +158,7 @@ async function verStatsOperario(id, nombre) {
         let infoHtml = `<p class="mb-1"><strong>Username:</strong> <code>@${u.username}</code> | <strong>Total Sesiones:</strong> <code>${r.total_actividades}</code> | <strong>Horas Totales:</strong> <code>${r.total_horas} hs</code></p>`;
         document.getElementById('stats-op-info').innerHTML = infoHtml;
         
-        // Cargar imagen de gráfico dinámico de Matplotlib
+        // Cargar imagen de gráfico de líneas dinámico de Matplotlib
         const chartImg = document.getElementById('stats-op-chart');
         chartImg.src = `/api/v1/admin/usuarios/${id}/grafico-stats?t=${new Date().getTime()}`;
 
@@ -281,11 +316,11 @@ async function prepararAsignarOperario(actId) {
 // 5. Informes & KPIs
 async function loadInformes() {
     try {
-        const resTurno = await API.get('/api/v1/reportes/turno');
-        const resSemana = await API.get('/api/v1/reportes/semana');
+        const resTurno = await API.get('/api/v1/informes/reporte-turno');
+        const resSemana = await API.get('/api/v1/informes/reporte-semana');
         
         let htmlTurno = '<ul class="list-group list-group-flush mb-3">';
-        resTurno.reporte_turno.forEach(t => {
+        resTurno.reporte_turno.slice(0, 8).forEach(t => {
             htmlTurno += `<li class="list-group-item bg-transparent text-light border-secondary px-0"><strong>${t.fecha} (${t.maquina}):</strong> ${t.horas_activas} hs (${t.total_actividades} sesiones)</li>`;
         });
         htmlTurno += '</ul>';
@@ -315,28 +350,33 @@ function exportarCSV() {
 async function loadConfiguracion() {
     try {
         const data = await API.get('/api/v1/configuracion');
-        data.configuracion.forEach(c => {
-            if (c.clave === 'timeout_inactividad_minutos') document.getElementById('cfg-timeout').value = c.valor;
-            if (c.clave === 'inicio_turno_manana') document.getElementById('cfg-manana').value = c.valor;
-            if (c.clave === 'inicio_turno_tarde') document.getElementById('cfg-tarde').value = c.valor;
-            if (c.clave === 'inicio_turno_noche') document.getElementById('cfg-noche').value = c.valor;
-        });
+        const cfg = data.configuracion || {};
+
+        if (cfg.inactividad_minutos) document.getElementById('cfg-timeout').value = cfg.inactividad_minutos;
+        if (cfg.inicio_turno_manana) document.getElementById('cfg-manana').value = cfg.inicio_turno_manana;
+        if (cfg.fin_turno_manana) document.getElementById('cfg-fin-manana').value = cfg.fin_turno_manana;
+        if (cfg.inicio_turno_tarde) document.getElementById('cfg-tarde').value = cfg.inicio_turno_tarde;
+        if (cfg.fin_turno_tarde) document.getElementById('cfg-fin-tarde').value = cfg.fin_turno_tarde;
+        if (cfg.inicio_turno_noche) document.getElementById('cfg-noche').value = cfg.inicio_turno_noche;
+        if (cfg.fin_turno_noche) document.getElementById('cfg-fin-noche').value = cfg.fin_turno_noche;
     } catch (e) {
         console.error("Error cargando configuración:", e);
     }
 }
 
 async function guardarConfiguracion() {
-    const timeout = document.getElementById('cfg-timeout').value;
-    const manana = document.getElementById('cfg-manana').value;
-    const tarde = document.getElementById('cfg-tarde').value;
-    const noche = document.getElementById('cfg-noche').value;
+    const items = [
+        { clave: 'inactividad_minutos', valor: document.getElementById('cfg-timeout').value },
+        { clave: 'inicio_turno_manana', valor: document.getElementById('cfg-manana').value },
+        { clave: 'fin_turno_manana', valor: document.getElementById('cfg-fin-manana').value },
+        { clave: 'inicio_turno_tarde', valor: document.getElementById('cfg-tarde').value },
+        { clave: 'fin_turno_tarde', valor: document.getElementById('cfg-fin-tarde').value },
+        { clave: 'inicio_turno_noche', valor: document.getElementById('cfg-noche').value },
+        { clave: 'fin_turno_noche', valor: document.getElementById('cfg-fin-noche').value }
+    ];
 
     try {
-        await API.post('/api/v1/configuracion', { clave: 'timeout_inactividad_minutos', valor: timeout });
-        await API.post('/api/v1/configuracion', { clave: 'inicio_turno_manana', valor: manana });
-        await API.post('/api/v1/configuracion', { clave: 'inicio_turno_tarde', valor: tarde });
-        await API.post('/api/v1/configuracion', { clave: 'inicio_turno_noche', valor: noche });
+        await API.post('/api/v1/admin/configuracion', { items });
         alert("Configuración guardada exitosamente.");
     } catch (e) {
         alert("Error al guardar configuración.");

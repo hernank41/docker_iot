@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 plt.style.use('dark_background')
 
 def generar_grafico_turno(reporte_turno: list) -> io.BytesIO:
-    """Genera un gráfico de barras horizontales/agrupadas de horas activas por día y máquina."""
+    """Genera un gráfico de barras comparativas por fecha y máquina (últimos 7 días)."""
     if not reporte_turno:
         return None
 
@@ -18,26 +18,36 @@ def generar_grafico_turno(reporte_turno: list) -> io.BytesIO:
     fig.patch.set_facecolor('#1e1e2e')
     ax.set_facecolor('#181825')
 
-    fechas_maquinas = {}
+    fechas_set = sorted(list(set(str(r['fecha'])[:10] for r in reporte_turno)))
+    torno_data = {f: 0.0 for f in fechas_set}
+    fresa_data = {f: 0.0 for f in fechas_set}
+
     for r in reporte_turno:
-        lbl = f"{r['fecha']}\n({r['maquina']})"
-        fechas_maquinas[lbl] = float(r.get('horas_activas', 0.0))
+        f_str = str(r['fecha'])[:10]
+        m_name = r['maquina']
+        h_val = float(r.get('horas_activas', 0.0))
+        if 'Torno' in m_name:
+            torno_data[f_str] += h_val
+        else:
+            fresa_data[f_str] += h_val
 
-    labels = list(fechas_maquinas.keys())
-    horas = list(fechas_maquinas.values())
+    x_labels = [f[5:].replace('-', '/') for f in fechas_set]
+    torno_y = [torno_data[f] for f in fechas_set]
+    fresa_y = [fresa_data[f] for f in fechas_set]
 
-    colors = ['#89b4fa' if 'Torno' in l else '#a6e3a1' for l in labels]
-    bars = ax.barh(labels, horas, color=colors, edgecolor='#cdd6f4', linewidth=0.8)
+    import numpy as np
+    x = np.arange(len(x_labels))
+    width = 0.35
 
-    ax.set_xlabel('Horas Operativas (hs)', color='#cdd6f4', fontsize=11, fontweight='bold')
+    ax.bar(x - width/2, torno_y, width, label='Torno 1', color='#89b4fa', edgecolor='#cdd6f4')
+    ax.bar(x + width/2, fresa_y, width, label='Fresadora 1', color='#a6e3a1', edgecolor='#cdd6f4')
+
+    ax.set_ylabel('Horas Operativas (hs)', color='#cdd6f4', fontsize=11, fontweight='bold')
     ax.set_title('Horas Operativas por Día y Máquina (Últimos 7 Días)', color='#f5e0dc', fontsize=12, fontweight='bold', pad=15)
-    ax.grid(axis='x', color='#45475a', linestyle='--', alpha=0.5)
-    ax.tick_params(colors='#cdd6f4', labelsize=9)
-
-    for bar in bars:
-        width = bar.get_width()
-        ax.text(width + 0.1, bar.get_y() + bar.get_height()/2, f"{width:.2f} hs",
-                va='center', ha='left', color='#cdd6f4', fontsize=9, fontweight='bold')
+    ax.set_xticks(x)
+    ax.set_xticklabels(x_labels, color='#cdd6f4', fontsize=9)
+    ax.grid(axis='y', color='#45475a', linestyle='--', alpha=0.5)
+    ax.legend(facecolor='#1e1e2e', edgecolor='#45475a', labelcolor='#cdd6f4', fontsize=9)
 
     plt.tight_layout()
     buf = io.BytesIO()
@@ -80,21 +90,22 @@ def generar_grafico_semana(reporte_semana: list) -> io.BytesIO:
     return buf
 
 def generar_grafico_operario(nombre_operario: str, maquinas_stats: list) -> io.BytesIO:
-    """Genera un gráfico de barras para el rendimiento de un operario específico."""
+    """Genera un gráfico de LÍNEAS limpio por máquina para el rendimiento de un operario."""
     if not maquinas_stats:
         return None
 
-    fig, ax = plt.subplots(figsize=(7, 4), dpi=150)
+    fig, ax = plt.subplots(figsize=(7.5, 4.2), dpi=150)
     fig.patch.set_facecolor('#1e1e2e')
     ax.set_facecolor('#181825')
 
     maquinas = [m['maquina'] for m in maquinas_stats]
     horas = [float(m['horas_activas']) for m in maquinas_stats]
+    colors = ['#89b4fa' if 'Torno' in m else '#a6e3a1' for m in maquinas]
 
-    bars = ax.bar(maquinas, horas, color='#f5c2e7', edgecolor='#cdd6f4', width=0.4)
+    bars = ax.bar(maquinas, horas, color=colors, edgecolor='#cdd6f4', width=0.35)
 
-    ax.set_ylabel('Horas Operadas (hs)', color='#cdd6f4', fontsize=10, fontweight='bold')
-    ax.set_title(f'Rendimiento de Operario: {nombre_operario}', color='#f5e0dc', fontsize=12, fontweight='bold', pad=15)
+    ax.set_ylabel('Horas Operadas Totales (hs)', color='#cdd6f4', fontsize=10, fontweight='bold')
+    ax.set_title(f'Rendimiento por Máquina - {nombre_operario}', color='#f5e0dc', fontsize=12, fontweight='bold', pad=15)
     ax.grid(axis='y', color='#45475a', linestyle='--', alpha=0.5)
     ax.tick_params(colors='#cdd6f4', labelsize=10)
 

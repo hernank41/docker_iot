@@ -47,7 +47,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data.clear()
         await safe_edit_or_reply(
             query,
-            "**Sesión cerrada correctamente.**\n\nPara volver a iniciar sesión ejecute `/start`, `/login` o `/login_operario`."
+            "**Sesión cerrada correctamente.**\n\nPara volver a iniciar sesión ejecute `/start` o `/login`."
         )
         return
 
@@ -74,9 +74,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             causa = m.get("causa") or "OPERACION_NORMAL"
             
             text += f"• **{m['maquina']}** ({m['tipo']})\n"
-            text += f"   • **Estado:** `{estado_str}` [{causa}]\n"
-            text += f"   • **Operario:** {operario}\n"
-            text += f"   • **Herramienta:** {herramienta}\n\n"
+            text += f"  Estado: `{estado_str}` [{causa}]\n"
+            text += f"  Operario: {operario}\n"
+            text += f"  Herramienta: {herramienta}\n\n"
 
         await safe_edit_or_reply(query, text, reply_markup=get_admin_menu_keyboard())
 
@@ -134,7 +134,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         op_id = int(data.split("_")[-1])
         res = await api_client.eliminar_usuario(op_id)
         if res and res.get("status") == "ok":
-            await safe_edit_or_reply(query, f"Operario ID `{op_id}` eliminado/desactivado exitosamente.", reply_markup=get_operarios_menu_keyboard())
+            await safe_edit_or_reply(query, f"Operario ID `{op_id}` eliminado exitosamente.", reply_markup=get_operarios_menu_keyboard())
         else:
             await safe_edit_or_reply(query, "No se pudo eliminar el operario.", reply_markup=get_operarios_menu_keyboard())
 
@@ -179,9 +179,10 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.message.delete()
             except Exception:
                 pass
+            caption_text = text if len(text) <= 900 else text[:900] + "..."
             await query.message.reply_photo(
                 photo=InputFile(chart_buf, filename="operario_stats.png"),
-                caption=text,
+                caption=caption_text,
                 parse_mode="Markdown",
                 reply_markup=get_operarios_menu_keyboard()
             )
@@ -213,10 +214,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         text = "**INFORME DE ACTIVIDADES POR DÍA Y TURNO (Últimos 7 Días)**\n\n"
-        for r in rep:
-            text += f"**Fecha:** `{r['fecha']}` | **Máquina:** `{r['maquina']}`\n"
-            text += f"   • **Horas Activas:** `{r['horas_activas']} hs`\n"
-            text += f"   • **Sesiones:** `{r['total_actividades']}` | **Operario:** {r['operarios'] or 'N/A'}\n\n"
+        for r in rep[:10]: # Limitar a las 10 entradas más recientes para brevedad
+            text += f"• **Fecha:** `{r['fecha']}` | **Máquina:** `{r['maquina']}`\n"
+            text += f"   • **Horas Activas:** `{r['horas_activas']} hs` | **Sesiones:** `{r['total_actividades']}`\n\n"
 
         chart_buf = generar_grafico_turno(rep)
         if chart_buf:
@@ -224,12 +224,16 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.message.delete()
             except Exception:
                 pass
+            
+            caption_text = "**INFORME DE ACTIVIDADES POR DÍA Y TURNO (Últimos 7 Días)**\n\nGráfico comparativo de horas operativas generado."
             await query.message.reply_photo(
                 photo=InputFile(chart_buf, filename="reporte_turno.png"),
-                caption=text,
+                caption=caption_text,
                 parse_mode="Markdown",
                 reply_markup=get_informes_keyboard()
             )
+            # Enviar el detalle extenso como texto por separado si es necesario
+            await query.message.reply_text(text, parse_mode="Markdown")
         else:
             await safe_edit_or_reply(query, text, reply_markup=get_informes_keyboard())
 
@@ -241,7 +245,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
         text = "**INFORME CONSOLIDADO SEMANAL**\n\n"
         for r in rep:
-            text += f"**Máquina:** `{r['maquina']}`\n"
+            text += f"• **Máquina:** `{r['maquina']}`\n"
             text += f"   • **Total Horas Operativas:** `{r['total_horas_activas']} hs`\n"
             text += f"   • **Sesiones de Actividad:** `{r['total_actividades']}`\n"
             text += f"   • **Operarios Involucrados:** `{r['total_operarios_participantes']}`\n\n"
@@ -252,38 +256,45 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.message.delete()
             except Exception:
                 pass
+            caption_text = "**INFORME CONSOLIDADO SEMANAL**\n\nGráfico donut de utilización generado."
             await query.message.reply_photo(
                 photo=InputFile(chart_buf, filename="reporte_semana.png"),
-                caption=text,
+                caption=caption_text,
                 parse_mode="Markdown",
                 reply_markup=get_informes_keyboard()
             )
+            await query.message.reply_text(text, parse_mode="Markdown")
         else:
             await safe_edit_or_reply(query, text, reply_markup=get_informes_keyboard())
 
-    # 5. Menú Configuración Global
+    # 5. Configuración del Sistema
     elif data == "admin_config_menu":
-        configs = await api_client.get_configuracion()
-        await safe_edit_or_reply(
-            query,
-            "**CONFIGURACIÓN GLOBAL DEL SISTEMA**\n\n"
-            "Seleccione con los botones el parámetro que desea modificar:",
-            reply_markup=get_config_menu_keyboard(configs)
-        )
+        cfg = await api_client.get_configuracion()
+        if not cfg:
+            await safe_edit_or_reply(query, "No se pudo cargar la configuración del sistema.", reply_markup=get_admin_menu_keyboard())
+            return
+
+        items = [{"clave": k, "valor": v} for k, v in cfg.items()]
+        text = "**CONFIGURACIÓN GLOBAL DEL SISTEMA**\n\n"
+        for k, v in cfg.items():
+            text += f"• `{k}`: `{v}`\n"
+        text += "\n*Seleccione un parámetro para modificar su valor:*"
+
+        await safe_edit_or_reply(query, text, reply_markup=get_config_menu_keyboard(items))
 
     elif data.startswith("edit_cfg_"):
         clave = data.replace("edit_cfg_", "")
-        context.user_data["esperando_accion"] = "editar_cfg_valor"
-        context.user_data["cfg_clave_temp"] = clave
-
+        context.user_data["esperando_accion"] = f"cfg_val_{clave}"
         await safe_edit_or_reply(
             query,
-            f"**MODIFICAR CONFIGURACIÓN: `{clave}`**\n\n"
-            f"Por favor, envíe un **mensaje de texto** con el nuevo valor para esta variable:",
+            f"**MODIFICAR PARÁMETRO DE CONFIGURACIÓN**\n\n"
+            f"Parámetro: `{clave}`\n"
+            f"Por favor, envíe el **nuevo valor** en un mensaje de texto:",
             reply_markup=get_cancel_keyboard("admin_config_menu")
         )
 
 async def admin_text_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja las entradas de texto interactivas para Administrador (Crear operario, editar config)."""
     accion = context.user_data.get("esperando_accion")
     if not accion:
         return
@@ -291,47 +302,44 @@ async def admin_text_input_handler(update: Update, context: ContextTypes.DEFAULT
     text = update.message.text.strip()
 
     if accion == "crear_op_nombre":
-        context.user_data["op_nombre_temp"] = text
+        context.user_data["temp_op_nombre"] = text
         context.user_data["esperando_accion"] = "crear_op_username"
         await update.message.reply_text(
             f"**NUEVO OPERARIO (Paso 2 de 2)**\n\n"
-            f"Nombre ingresado: **{text}**\n\n"
-            f"Ahora envíe el **nombre de usuario** para el inicio de sesión del operario (ejemplo: `mlopez`):",
+            f"Nombre: *{text}*\n"
+            f"Ahora envíe el **Nombre de Usuario** (sin espacios, ej: *mlopez*):",
             parse_mode="Markdown",
             reply_markup=get_cancel_keyboard("admin_operarios_menu")
         )
 
     elif accion == "crear_op_username":
-        nombre = context.user_data.get("op_nombre_temp", "Operario")
-        username = text.lower().replace("@", "")
+        nombre = context.user_data.get("temp_op_nombre")
+        username = text.lower().replace(" ", "").replace("@", "")
         context.user_data.pop("esperando_accion", None)
+        context.user_data.pop("temp_op_nombre", None)
 
-        res = await api_client.crear_usuario(nombre, username, rol="OPERARIO")
+        res = await api_client.crear_usuario(nombre=nombre, username=username, rol="OPERARIO")
         if res and res.get("status") == "ok":
             await update.message.reply_text(
-                f"**Operario Creado Exitosamente.**\n\n"
+                f"**Operario Creado Exitosamente:**\n"
                 f"• **Nombre:** {nombre}\n"
-                f"• **Usuario:** `@{username}`\n\n"
-                f"El operario ya puede iniciar sesión enviando:\n`/login_operario {username}`",
+                f"• **Usuario:** `@{username}`",
                 parse_mode="Markdown",
                 reply_markup=get_operarios_menu_keyboard()
             )
         else:
-            await update.message.reply_text("No se pudo crear el operario. Verifique que el usuario no exista.", reply_markup=get_operarios_menu_keyboard())
+            await update.message.reply_text("Error al crear el operario.", reply_markup=get_operarios_menu_keyboard())
 
-    elif accion == "editar_cfg_valor":
-        clave = context.user_data.get("cfg_clave_temp")
-        valor = text
+    elif accion.startswith("cfg_val_"):
+        clave = accion.replace("cfg_val_", "")
         context.user_data.pop("esperando_accion", None)
 
-        res = await api_client.actualizar_configuracion(clave, valor)
+        res = await api_client.actualizar_configuracion(clave, text)
         if res and res.get("status") == "ok":
             await update.message.reply_text(
-                f"**Configuración Actualizada Exitosamente.**\n\n"
-                f"• **Clave:** `{clave}`\n"
-                f"• **Nuevo Valor:** `{valor}`",
+                f"**Parámetro Actualizado Exitosamente:**\n`{clave}` = `{text}`",
                 parse_mode="Markdown",
                 reply_markup=get_admin_menu_keyboard()
             )
         else:
-            await update.message.reply_text("Error al actualizar configuración.", reply_markup=get_admin_menu_keyboard())
+            await update.message.reply_text("Error al actualizar la configuración.", reply_markup=get_admin_menu_keyboard())

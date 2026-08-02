@@ -15,7 +15,8 @@ from handlers.common import (
     role_callback_handler,
     login_command,
     login_operario_command,
-    logout_command
+    logout_command,
+    login_step_text_handler
 )
 from handlers.admin import (
     admin_callback_handler,
@@ -36,7 +37,9 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8684338338:AAGSiGXsVvbAmkYqnL7X8wwl
 
 async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Router para capturar texto del usuario según el estado activo."""
-    if context.user_data.get("esperando_accion"):
+    if context.user_data.get("esperando_login"):
+        await login_step_text_handler(update, context)
+    elif context.user_data.get("esperando_accion"):
         await admin_text_input_handler(update, context)
     elif context.user_data.get("esperando_comentario_actividad_id"):
         await recibir_comentario_handler(update, context)

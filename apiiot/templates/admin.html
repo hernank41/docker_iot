@@ -15,13 +15,45 @@
     <nav class="navbar navbar-expand-lg navbar-dark mb-4">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold text-info" href="#">Industrial IoT Stack | Panel Admin</a>
-            <span class="navbar-text text-muted small">v2.0.0</span>
+            <div class="d-flex align-items-center gap-3">
+                <span class="navbar-text text-muted small">v2.0.0</span>
+                {% if authenticated %}
+                <button class="btn btn-outline-danger btn-sm" onclick="cerrarSesionWeb()">Cerrar Sesión</button>
+                {% endif %}
+            </div>
         </div>
     </nav>
 
     <!-- Main Container -->
     <div class="container-fluid px-4">
         
+        {% if not authenticated %}
+        <!-- Formulario de Login de Administrador -->
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-4">
+                <div class="card shadow border-info">
+                    <div class="card-header bg-dark text-info fw-bold text-center py-3">
+                        <h4 class="mb-0">Acceso Administrador</h4>
+                    </div>
+                    <div class="card-body p-4">
+                        <form id="formWebLogin" onsubmit="iniciarSesionWeb(event)">
+                            <div class="mb-3">
+                                <label class="form-label text-light">Usuario de Administrador:</label>
+                                <input type="text" class="form-control" id="login-username" value="admin" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-light">Contraseña:</label>
+                                <input type="password" class="form-control" id="login-password" value="admin123" required>
+                            </div>
+                            <div id="login-error" class="alert alert-danger d-none py-2"></div>
+                            <button type="submit" class="btn btn-info w-100 fw-bold py-2 mt-2">Iniciar Sesión</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+
         <!-- Navigation Tabs -->
         <ul class="nav nav-tabs mb-4" id="adminTab" role="tablist">
             <li class="nav-item" role="presentation">
@@ -189,32 +221,51 @@
                 <div class="card col-md-8">
                     <div class="card-body">
                         <div class="mb-3">
-                            <label class="form-label">Tiempo límite de inactividad (Tinactividad) en minutos:</label>
+                            <label class="form-label text-light">Tiempo límite de inactividad (Tinactividad) en minutos:</label>
                             <input type="number" class="form-control" id="cfg-timeout" value="10">
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Inicio Turno Mañana:</label>
-                            <input type="text" class="form-control" id="cfg-manana" value="06:00">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-light">Inicio Turno Mañana:</label>
+                                <input type="text" class="form-control" id="cfg-manana" value="07:00">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-light">Fin Turno Mañana:</label>
+                                <input type="text" class="form-control" id="cfg-fin-manana" value="12:00">
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Inicio Turno Tarde:</label>
-                            <input type="text" class="form-control" id="cfg-tarde" value="14:00">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-light">Inicio Turno Tarde:</label>
+                                <input type="text" class="form-control" id="cfg-tarde" value="14:00">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-light">Fin Turno Tarde:</label>
+                                <input type="text" class="form-control" id="cfg-fin-tarde" value="17:00">
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Inicio Turno Noche:</label>
-                            <input type="text" class="form-control" id="cfg-noche" value="22:00">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-light">Inicio Turno Noche:</label>
+                                <input type="text" class="form-control" id="cfg-noche" value="22:00">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-light">Fin Turno Noche:</label>
+                                <input type="text" class="form-control" id="cfg-fin-noche" value="06:00">
+                            </div>
                         </div>
-                        <button class="btn btn-info fw-bold" onclick="guardarConfiguracion()">Guardar Configuración</button>
+                        <button class="btn btn-info fw-bold mt-2" onclick="guardarConfiguracion()">Guardar Configuración</button>
                     </div>
                 </div>
             </div>
 
         </div>
+        {% endif %}
     </div>
 
     <!-- Modales -->
     
-    <!-- Modal Stats Operario (Matplotlib Chart) -->
+    <!-- Modal Stats Operario (Matplotlib Line Chart) -->
     <div class="modal fade" id="modalStatsOperario" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -225,7 +276,7 @@
                 <div class="modal-body text-center">
                     <div id="stats-op-info" class="text-start mb-3"></div>
                     <div class="p-2 rounded bg-dark border border-secondary">
-                        <img id="stats-op-chart" src="" alt="Gráfico de Rendimiento" class="img-fluid rounded">
+                        <img id="stats-op-chart" src="" alt="Gráfico de Rendimiento por Línea" class="img-fluid rounded">
                     </div>
                 </div>
                 <div class="modal-footer">

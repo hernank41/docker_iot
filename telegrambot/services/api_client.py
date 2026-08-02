@@ -58,7 +58,12 @@ class APIClient:
     async def get_estado_actual(self):
         async with httpx.AsyncClient() as client:
             res = await client.get(f"{self.base_url}/api/v1/maquinas/estado-actual", timeout=5.0)
-            return res.json().get("estado_maquinas", []) if res.status_code == 200 else []
+            return res.json().get("maquinas", []) if res.status_code == 200 else []
+
+    async def get_asignacion_operario(self, operario_id: int):
+        async with httpx.AsyncClient() as client:
+            res = await client.get(f"{self.base_url}/api/v1/asignaciones/operario/{operario_id}", timeout=5.0)
+            return res.json() if res.status_code == 200 else {}
 
     async def get_herramientas(self, maquina_id: int = None):
         async with httpx.AsyncClient() as client:
@@ -99,26 +104,35 @@ class APIClient:
             )
             return res.json() if res.status_code == 200 else None
 
+    async def actualizar_comentario_actividad(self, actividad_id: int, comentario: str):
+        async with httpx.AsyncClient() as client:
+            res = await client.put(
+                f"{self.base_url}/api/v1/admin/actividades/{actividad_id}/comentario",
+                json={"comentario": comentario},
+                timeout=5.0
+            )
+            return res.json() if res.status_code == 200 else None
+
     async def get_reporte_turno(self):
         async with httpx.AsyncClient() as client:
-            res = await client.get(f"{self.base_url}/api/v1/reportes/turno", timeout=5.0)
+            res = await client.get(f"{self.base_url}/api/v1/informes/reporte-turno", timeout=5.0)
             return res.json().get("reporte_turno", []) if res.status_code == 200 else []
 
     async def get_reporte_semana(self):
         async with httpx.AsyncClient() as client:
-            res = await client.get(f"{self.base_url}/api/v1/reportes/semana", timeout=5.0)
+            res = await client.get(f"{self.base_url}/api/v1/informes/reporte-semana", timeout=5.0)
             return res.json().get("reporte_semana", []) if res.status_code == 200 else []
 
     async def get_configuracion(self):
         async with httpx.AsyncClient() as client:
             res = await client.get(f"{self.base_url}/api/v1/configuracion", timeout=5.0)
-            return res.json().get("configuracion", []) if res.status_code == 200 else []
+            return res.json().get("configuracion", {}) if res.status_code == 200 else {}
 
     async def actualizar_configuracion(self, clave: str, valor: str):
         async with httpx.AsyncClient() as client:
             res = await client.post(
                 f"{self.base_url}/api/v1/configuracion",
-                json={"clave": clave, "valor": valor},
+                json={"items": [{"clave": clave, "valor": valor}]},
                 timeout=5.0
             )
             return res.json() if res.status_code == 200 else None

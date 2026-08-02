@@ -1,10 +1,10 @@
-from fastapi import FastAPI, HTTPException, Query, Body, Request
+from fastapi import FastAPI, HTTPException, Query, Body, Request, Cookie, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, RedirectResponse, JSONResponse
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import aiomysql
 import os
 import logging
@@ -27,7 +27,7 @@ os.makedirs("/app/templates", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# CORS middleware for Grafana / web dashboards
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -77,9 +77,12 @@ class FinalizarActividad(BaseModel):
     actividad_id: int
     comentario: Optional[str] = "Actividad concluida"
 
-class ConfiguracionUpdate(BaseModel):
+class ConfiguracionItem(BaseModel):
     clave: str
     valor: str
+
+class ConfiguracionBulkUpdate(BaseModel):
+    items: List[ConfiguracionItem]
 
 class NotificacionEmergencia(BaseModel):
     maquina: str
@@ -98,8 +101,9 @@ async def root():
 
 # 1. Autenticación & Usuarios
 @app.post("/api/v1/auth/login")
-async def login(req: LoginRequest):
-    """Autentica a un Administrador."""
+@app.post("/api/v1/admin/login")
+async def login_endpoint(req: LoginRequest, response: Response):
+    """Autentica a un Administrador y genera una cookie de sesión."""
     try:
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
@@ -113,14 +117,24 @@ async def login(req: LoginRequest):
         if not user:
             raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
-        # Simplificación segura de contraseña para dev / admin123
         admin_pass_env = os.getenv("ADMIN_PASSWORD", "admin123")
         if req.password == admin_pass_env or req.password == "admin123":
-            return {"status": "ok", "usuario": user}
+            res = JSONResponse(content={"status": "ok", "usuario": user})
+            res.set_cookie(key="admin_session", value="authenticated", max_age=86400, httponly=False)
+            return res
         
         raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/admin/logout")
+async def logout_endpoint(response: Response):
+    """Cierra la sesión del administrador limpiando la cookie."""
+    res = JSONResponse(content={"status": "ok", "mensaje": "Sesión cerrada correctamente"})
+    res.delete_cookie("admin_session")
+    return res
 
 @app.get("/api/v1/usuarios")
 async def listar_usuarios():
@@ -157,9 +171,9 @@ async def eliminar_usuario(usuario_id: int):
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cur:
-            await cur.execute("UPDATE usuarios SET activo = FALSE WHERE id = %s", (usuario_id,))
+            await cur.execute("DELETE FROM usuarios WHERE id = %s", (usuario_id,))
         conn.close()
-        return {"status": "ok", "mensaje": "Usuario desactivado."}
+        return {"status": "ok", "mensaje": "Usuario eliminado."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -184,13 +198,11 @@ async def obtener_stats_usuario(usuario_id: int):
     try:
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            # 1. Información del usuario
             await cur.execute("SELECT id, nombre, username, rol, telegram_id, fecha_creacion FROM usuarios WHERE id = %s", (usuario_id,))
             user = await cur.fetchone()
             if not user:
                 raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-            # 2. Resumen general de actividades
             await cur.execute("""
                 SELECT 
                     COUNT(id) AS total_actividades,
@@ -201,7 +213,6 @@ async def obtener_stats_usuario(usuario_id: int):
             """, (usuario_id,))
             resumen = await cur.fetchone()
 
-            # 3. Desglose por máquina
             await cur.execute("""
                 SELECT 
                     m.nombre AS maquina,
@@ -214,7 +225,6 @@ async def obtener_stats_usuario(usuario_id: int):
             """, (usuario_id,))
             maquinas_stats = await cur.fetchall()
 
-            # 4. Últimas 5 actividades
             await cur.execute("""
                 SELECT 
                     act.id, m.nombre AS maquina, act.fecha_inicio, act.fecha_fin,
@@ -253,65 +263,125 @@ async def listar_maquinas():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/maquinas/estado-actual")
-async def estado_actual():
-    """Retorna el estado en tiempo real, operario y herramienta asignados a cada máquina."""
+async def estado_actual_maquinas():
+    """Retorna el estado operativo en tiempo real de todas las máquinas."""
     try:
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            query = """
+            sql = """
                 SELECT 
-                    m.id AS maquina_id, 
-                    m.nombre AS maquina, 
-                    m.tipo, 
-                    COALESCE(r.estado, 'PARADA') AS estado, 
-                    COALESCE(r.codigo_estado, 0) AS codigo_estado, 
-                    COALESCE(r.causa, 'OPERACION_NORMAL') AS causa, 
-                    r.timestamp AS ultimo_cambio,
-                    u.nombre AS operario_nombre,
+                    m.id AS maquina_id,
+                    m.nombre AS maquina,
+                    m.tipo,
+                    COALESCE(
+                        (SELECT estado FROM registro_actividad WHERE maquina_id = m.id ORDER BY timestamp DESC LIMIT 1),
+                        'PARADA'
+                    ) AS estado,
+                    (SELECT causa FROM registro_actividad WHERE maquina_id = m.id ORDER BY timestamp DESC LIMIT 1) AS causa,
                     u.id AS operario_id,
-                    h.nombre AS herramienta_nombre,
-                    h.horas_uso AS herramienta_horas_uso,
-                    h.horas_expectativa AS herramienta_horas_expectativa
+                    u.nombre AS operario_nombre,
+                    u.username AS operario_username,
+                    h.id AS herramienta_id,
+                    h.nombre AS herramienta_nombre
                 FROM maquinas m
-                LEFT JOIN registro_actividad r ON r.id = (
-                    SELECT id FROM registro_actividad 
-                    WHERE maquina_id = m.id 
-                    ORDER BY timestamp DESC LIMIT 1
-                )
                 LEFT JOIN asignaciones_actuales a ON a.maquina_id = m.id
-                LEFT JOIN usuarios u ON u.id = a.operario_id
-                LEFT JOIN herramientas h ON h.id = a.herramienta_id
+                LEFT JOIN usuarios u ON a.operario_id = u.id
+                LEFT JOIN herramientas h ON a.herramienta_id = h.id
+                ORDER BY m.id ASC
             """
-            await cur.execute(query)
+            await cur.execute(sql)
             res = await cur.fetchall()
         conn.close()
-        return {"estado_maquinas": res}
+        return {"maquinas": res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 3. Herramientas
-@app.get("/api/v1/herramientas")
-async def listar_herramientas(maquina_id: Optional[int] = None):
-    """Lista herramientas con porcentaje de desgaste."""
+# 3. Asignaciones & Restricciones de Operarios
+@app.get("/api/v1/asignaciones/operario/{operario_id}")
+async def obtener_asignacion_operario(operario_id: int):
+    """Retorna la máquina y herramienta actualmente asignadas a un operario, junto con el comentario activo."""
     try:
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            if maquina_id:
-                await cur.execute("""
-                    SELECT h.*, m.nombre AS maquina_nombre,
-                           ROUND((h.horas_uso / NULLIF(h.horas_expectativa, 0)) * 100, 1) AS porcentaje_desgaste
-                    FROM herramientas h
-                    JOIN maquinas m ON m.id = h.maquina_id
-                    WHERE h.maquina_id = %s
-                """, (maquina_id,))
+            sql = """
+                SELECT a.maquina_id, m.nombre AS maquina_nombre,
+                       a.herramienta_id, h.nombre AS herramienta_nombre
+                FROM asignaciones_actuales a
+                JOIN maquinas m ON a.maquina_id = m.id
+                LEFT JOIN herramientas h ON a.herramienta_id = h.id
+                WHERE a.operario_id = %s
+            """
+            await cur.execute(sql, (operario_id,))
+            asig = await cur.fetchone()
+
+            # Actividad activa si existe
+            act_sql = """
+                SELECT id, comentario FROM actividades
+                WHERE operario_id = %s AND estado = 'EN_CURSO'
+                ORDER BY fecha_inicio DESC LIMIT 1
+            """
+            await cur.execute(act_sql, (operario_id,))
+            act = await cur.fetchone()
+
+        conn.close()
+        return {
+            "operario_id": operario_id,
+            "asignacion": asig,
+            "actividad_activa": act
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/asignaciones")
+async def actualizar_asignacion(a: AsignacionUpdate):
+    """Actualiza la asignación de operario y/o herramienta para una máquina."""
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor() as cur:
+            # Restricción: Un operario solo puede estar asignado a UNA máquina a la vez
+            if a.operario_id is not None:
+                await cur.execute("UPDATE asignaciones_actuales SET operario_id = NULL WHERE operario_id = %s", (a.operario_id,))
+
+            await cur.execute("SELECT maquina_id FROM asignaciones_actuales WHERE maquina_id = %s", (a.maquina_id,))
+            exists = await cur.fetchone()
+            
+            if exists:
+                if a.operario_id is not None and a.herramienta_id is not None:
+                    await cur.execute("UPDATE asignaciones_actuales SET operario_id = %s, herramienta_id = %s WHERE maquina_id = %s",
+                                      (a.operario_id, a.herramienta_id, a.maquina_id))
+                elif a.operario_id is not None:
+                    await cur.execute("UPDATE asignaciones_actuales SET operario_id = %s WHERE maquina_id = %s",
+                                      (a.operario_id, a.maquina_id))
+                elif a.herramienta_id is not None:
+                    await cur.execute("UPDATE asignaciones_actuales SET herramienta_id = %s WHERE maquina_id = %s",
+                                      (a.herramienta_id, a.maquina_id))
             else:
-                await cur.execute("""
-                    SELECT h.*, m.nombre AS maquina_nombre,
-                           ROUND((h.horas_uso / NULLIF(h.horas_expectativa, 0)) * 100, 1) AS porcentaje_desgaste
-                    FROM herramientas h
-                    JOIN maquinas m ON m.id = h.maquina_id
-                    ORDER BY h.maquina_id, h.id
-                """)
+                await cur.execute("INSERT INTO asignaciones_actuales (maquina_id, operario_id, herramienta_id) VALUES (%s, %s, %s)",
+                                  (a.maquina_id, a.operario_id, a.herramienta_id))
+        conn.close()
+        return {"status": "ok", "mensaje": "Asignación actualizada correctamente."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 4. Herramientas
+@app.get("/api/v1/herramientas")
+async def listar_herramientas(maquina_id: Optional[int] = Query(None)):
+    """Retorna la lista de herramientas registradas, filtrables por máquina."""
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            sql = """
+                SELECT h.id, h.nombre, h.maquina_id, m.nombre AS maquina_nombre,
+                       h.horas_uso, h.horas_expectativa,
+                       ROUND(LEAST((h.horas_uso / h.horas_expectativa) * 100.0, 100.0), 1) AS porcentaje_desgaste
+                FROM herramientas h
+                JOIN maquinas m ON h.maquina_id = m.id
+            """
+            if maquina_id:
+                sql += f" WHERE h.maquina_id = {maquina_id}"
+            sql += " ORDER BY h.maquina_id ASC, h.nombre ASC"
+            
+            await cur.execute(sql)
             res = await cur.fetchall()
         conn.close()
         return {"herramientas": res}
@@ -320,54 +390,41 @@ async def listar_herramientas(maquina_id: Optional[int] = None):
 
 @app.post("/api/v1/herramientas")
 async def crear_herramienta(h: HerramientaCreate):
-    """Registra una nueva herramienta."""
+    """Crea una nueva herramienta de corte."""
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO herramientas (maquina_id, nombre, horas_expectativa) VALUES (%s, %s, %s)",
+                "INSERT INTO herramientas (maquina_id, nombre, horas_expectativa, horas_uso) VALUES (%s, %s, %s, 0.0)",
                 (h.maquina_id, h.nombre, h.horas_expectativa)
             )
             h_id = cur.lastrowid
         conn.close()
-        return {"status": "ok", "id": h_id, "mensaje": f"Herramienta '{h.nombre}' registrada."}
+        return {"status": "ok", "id": h_id, "mensaje": f"Herramienta {h.nombre} agregada."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 4. Asignaciones
-@app.post("/api/v1/asignaciones")
-async def actualizar_asignacion(a: AsignacionUpdate):
-    """Actualiza operario y/o herramienta para una máquina."""
-    try:
-        conn = await get_db_connection()
-        async with conn.cursor() as cur:
-            await cur.execute("""
-                INSERT INTO asignaciones_actuales (maquina_id, operario_id, herramienta_id)
-                VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE 
-                    operario_id = COALESCE(%s, operario_id),
-                    herramienta_id = COALESCE(%s, herramienta_id)
-            """, (a.maquina_id, a.operario_id, a.herramienta_id, a.operario_id, a.herramienta_id))
-        conn.close()
-        return {"status": "ok", "mensaje": "Asignación actualizada."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# 5. Motor de Actividades
+# 5. Actividades & Lógica del Motor
 @app.get("/api/v1/actividades/activas")
-async def actividades_activas():
-    """Retorna las sesiones de actividad actualmente en curso."""
+async def listar_actividades_activas():
+    """Retorna las actividades actualmente EN_CURSO."""
     try:
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute("""
-                SELECT act.*, m.nombre AS maquina_nombre, u.nombre AS operario_nombre, h.nombre AS herramienta_nombre
-                FROM actividades act
-                JOIN maquinas m ON m.id = act.maquina_id
-                LEFT JOIN usuarios u ON u.id = act.operario_id
-                LEFT JOIN herramientas h ON h.id = act.herramienta_id
-                WHERE act.estado = 'EN_CURSO'
-            """)
+            sql = """
+                SELECT a.id, a.maquina_id, m.nombre AS maquina,
+                       a.operario_id, u.nombre AS operario,
+                       a.herramienta_id, h.nombre AS herramienta,
+                       a.fecha_inicio, a.comentario,
+                       TIMESTAMPDIFF(SECOND, a.fecha_inicio, NOW()) AS tiempo_transcurrido_seg
+                FROM actividades a
+                JOIN maquinas m ON a.maquina_id = m.id
+                LEFT JOIN usuarios u ON a.operario_id = u.id
+                LEFT JOIN herramientas h ON a.herramienta_id = h.id
+                WHERE a.estado = 'EN_CURSO'
+                ORDER BY a.fecha_inicio DESC
+            """
+            await cur.execute(sql)
             res = await cur.fetchall()
         conn.close()
         return {"actividades_activas": res}
@@ -375,124 +432,158 @@ async def actividades_activas():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/actividades/finalizar")
-async def finalizar_actividad(f: FinalizarActividad):
-    """Concluye manualmente una sesión de actividad con un comentario."""
-    try:
-        conn = await get_db_connection()
-        async with conn.cursor() as cur:
-            await cur.execute("""
-                UPDATE actividades 
-                SET estado = 'FINALIZADA', fecha_fin = CURRENT_TIMESTAMP, comentario = %s
-                WHERE id = %s
-            """, (f.comentario, f.actividad_id))
-        conn.close()
-        return {"status": "ok", "mensaje": f"Actividad {f.actividad_id} finalizada."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# 6. Reportes (Turnos y Semanal)
-@app.get("/api/v1/reportes/turno")
-async def reporte_turno():
-    """Genera informe consolidado del último turno de los últimos 7 días."""
+async def finalizar_actividad_manual(data: FinalizarActividad):
+    """Finaliza manualmente una actividad y registra el comentario."""
     try:
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            query = """
+            await cur.execute("SELECT id, fecha_inicio FROM actividades WHERE id = %s AND estado = 'EN_CURSO'", (data.actividad_id,))
+            act = await cur.fetchone()
+            if not act:
+                conn.close()
+                raise HTTPException(status_code=404, detail="Actividad activa no encontrada.")
+
+            ahora = datetime.now()
+            segundos = int((ahora - act["fecha_inicio"]).total_seconds())
+
+            await cur.execute(
+                """UPDATE actividades 
+                   SET fecha_fin = %s, tiempo_activo_segundos = %s, estado = 'FINALIZADA', comentario = %s
+                   WHERE id = %s""",
+                (ahora, segundos, data.comentario, data.actividad_id)
+            )
+        conn.close()
+        return {"status": "ok", "mensaje": f"Actividad #{data.actividad_id} finalizada correctamente."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 6. Informes & KPIs
+@app.get("/api/v1/informes/reporte-turno")
+async def reporte_turno(dias: int = Query(7)):
+    """Métrica agregada de actividades por fecha, máquina y turno."""
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            sql = """
                 SELECT 
-                    DATE(act.fecha_inicio) AS fecha,
+                    DATE(fecha_inicio) AS fecha,
                     m.nombre AS maquina,
-                    COUNT(act.id) AS total_actividades,
-                    SUM(act.tiempo_activo_segundos) AS tiempo_total_activo_seg,
-                    ROUND(SUM(act.tiempo_activo_segundos) / 3600.0, 2) AS horas_activas,
+                    COUNT(a.id) AS total_actividades,
+                    ROUND(COALESCE(SUM(a.tiempo_activo_segundos), 0) / 3600.0, 2) AS horas_activas,
                     GROUP_CONCAT(DISTINCT u.nombre SEPARATOR ', ') AS operarios
-                FROM actividades act
-                JOIN maquinas m ON m.id = act.maquina_id
-                LEFT JOIN usuarios u ON u.id = act.operario_id
-                WHERE act.fecha_inicio >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-                GROUP BY DATE(act.fecha_inicio), m.id, m.nombre
+                FROM actividades a
+                JOIN maquinas m ON a.maquina_id = m.id
+                LEFT JOIN usuarios u ON a.operario_id = u.id
+                WHERE a.fecha_inicio >= DATE_SUB(NOW(), INTERVAL %s DAY)
+                GROUP BY DATE(a.fecha_inicio), m.id, m.nombre
                 ORDER BY fecha DESC, maquina ASC
             """
-            await cur.execute(query)
+            await cur.execute(sql, (dias,))
             res = await cur.fetchall()
         conn.close()
         return {"reporte_turno": res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/reportes/semana")
+@app.get("/api/v1/informes/reporte-semana")
 async def reporte_semana():
-    """Genera informe consolidado de la última semana completa."""
+    """Resumen consolidado de horas de uso por máquina en los últimos 7 días."""
     try:
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            query = """
+            sql = """
                 SELECT 
                     m.nombre AS maquina,
-                    COUNT(act.id) AS total_actividades,
-                    ROUND(SUM(act.tiempo_activo_segundos) / 3600.0, 2) AS total_horas_activas,
-                    COUNT(DISTINCT act.operario_id) AS total_operarios_participantes
-                FROM actividades act
-                JOIN maquinas m ON m.id = act.maquina_id
-                WHERE act.fecha_inicio >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                    COUNT(a.id) AS total_actividades,
+                    ROUND(COALESCE(SUM(a.tiempo_activo_segundos), 0) / 3600.0, 2) AS total_horas_activas,
+                    COUNT(DISTINCT a.operario_id) AS total_operarios_participantes
+                FROM actividades a
+                JOIN maquinas m ON a.maquina_id = m.id
+                WHERE a.fecha_inicio >= DATE_SUB(NOW(), INTERVAL 7 DAY)
                 GROUP BY m.id, m.nombre
+                ORDER BY total_horas_activas DESC
             """
-            await cur.execute(query)
+            await cur.execute(sql)
             res = await cur.fetchall()
         conn.close()
         return {"reporte_semana": res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 7. Configuración Global
+# 7. Configuración del Sistema (Incluyendo Horarios de Inicio y Fin de Turnos)
 @app.get("/api/v1/configuracion")
+@app.get("/api/v1/admin/configuracion")
 async def obtener_configuracion():
-    """Retorna parámetros globales de configuración."""
+    """Retorna los parámetros dinámicos del sistema."""
     try:
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute("SELECT clave, valor, descripcion FROM configuracion_sistema")
-            res = await cur.fetchall()
+            rows = await cur.fetchall()
+
+        # Defaults para asegurar horas de inicio y fin de turnos
+        config_dict = {r["clave"]: r["valor"] for r in rows}
+        defaults = {
+            "inactividad_minutos": "10",
+            "inicio_turno_manana": "07:00",
+            "fin_turno_manana": "12:00",
+            "inicio_turno_tarde": "14:00",
+            "fin_turno_tarde": "17:00",
+            "inicio_turno_noche": "22:00",
+            "fin_turno_noche": "06:00"
+        }
+
+        async with conn.cursor() as cur:
+            for k, v in defaults.items():
+                if k not in config_dict:
+                    await cur.execute("INSERT INTO configuracion_sistema (clave, valor, descripcion) VALUES (%s, %s, 'Parámetro de turno')", (k, v))
+                    config_dict[k] = v
+
         conn.close()
-        return {"configuracion": res}
+        return {"configuracion": config_dict}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/configuracion")
-async def actualizar_configuracion(c: ConfiguracionUpdate):
-    """Actualiza una clave de configuración."""
+@app.post("/api/v1/admin/configuracion")
+async def actualizar_configuracion_bulk(payload: ConfiguracionBulkUpdate):
+    """Actualiza en bloque los parámetros dinámicos de configuración."""
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cur:
-            await cur.execute(
-                "INSERT INTO configuracion_sistema (clave, valor) VALUES (%s, %s) ON DUPLICATE KEY UPDATE valor = %s",
-                (c.clave, c.valor, c.valor)
-            )
+            for item in payload.items:
+                await cur.execute(
+                    """INSERT INTO configuracion_sistema (clave, valor) VALUES (%s, %s)
+                       ON DUPLICATE KEY UPDATE valor = VALUES(valor)""",
+                    (item.clave, item.valor)
+                )
         conn.close()
-        return {"status": "ok", "mensaje": f"Configuración '{c.clave}' actualizada a '{c.valor}'"}
+        return {"status": "ok", "mensaje": "Configuración actualizada correctamente."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 8. Webhook de Notificaciones (Parada de Emergencia)
+# 8. Webhooks de Notificación
 @app.post("/api/v1/notificar-emergencia")
 async def notificar_emergencia(n: NotificacionEmergencia):
-    """Envía alerta de PARADA_EMERGENCIA a los Administradores en Telegram."""
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not bot_token:
-        return {"status": "skipped", "reason": "No TELEGRAM_BOT_TOKEN set"}
-
+    """Notifica automáticamente vía Telegram a todos los Administradores."""
     try:
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if not bot_token:
+            return {"status": "skipped", "reason": "No bot token configured"}
+
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute("SELECT telegram_id FROM usuarios WHERE rol = 'ADMIN' AND telegram_id IS NOT NULL")
+            await cur.execute("SELECT telegram_id FROM usuarios WHERE rol = 'ADMIN' AND telegram_id IS NOT NULL AND activo = TRUE")
             admins = await cur.fetchall()
         conn.close()
 
         mensaje = (
-            f"🚨 **ALERTA DE SEGURIDAD: PARADA DE EMERGENCIA** 🚨\n\n"
-            f"🏭 **Máquina:** `{n.maquina}`\n"
-            f"⚠️ **Causa:** `{n.causa}`\n"
-            f"🕒 **Hora:** `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n\n"
-            f"Por favor revise la máquina de inmediato."
+            f"⚠️ **ALERTA DE SEGURIDAD INDUSTRIAL** ⚠️\n\n"
+            f"**Máquina:** `{n.maquina}`\n"
+            f"**Estado:** `PARADA_EMERGENCIA`\n"
+            f"**Causa:** `{n.causa}`\n"
+            f"**Timestamp:** `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n\n"
+            f"Verifique la planta de inmediato."
         )
 
         async with httpx.AsyncClient() as client:
@@ -541,7 +632,6 @@ async def simular_evento(evento: EventoSimulacion):
             await cur.execute(sql, (maquina_id, evento.estado, codigo_estado, evento.causa))
         conn.close()
 
-        # Si es parada de emergencia, llamar al webhook interno
         if evento.estado == "PARADA_EMERGENCIA":
             await notificar_emergencia(NotificacionEmergencia(maquina=maquina_nombre, causa=evento.causa or "PARADA_EMERGENCIA"))
 
@@ -564,9 +654,9 @@ class ComentarioUpdate(BaseModel):
     comentario: str
 
 @app.get("/admin", response_class=HTMLResponse)
-async def serve_admin_panel(request: Request):
-    """Servidor HTML del Panel Web Administrador SPA."""
-    return templates.TemplateResponse("admin.html", {"request": request})
+async def serve_admin_panel(request: Request, admin_session: Optional[str] = Cookie(None)):
+    """Servidor HTML del Panel Web Administrador SPA (Protegido por Autenticación)."""
+    return templates.TemplateResponse("admin.html", {"request": request, "authenticated": admin_session == "authenticated"})
 
 @app.get("/api/v1/admin/actividades")
 async def listar_actividades_admin():
@@ -737,7 +827,7 @@ async def exportar_informe_csv():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- Endpoints de Gráficos Estadísticos Matplotlib para Web Admin ---
+# --- Endpoints de Gráficos Estadísticos Matplotlib Refactorizados ---
 
 import matplotlib
 matplotlib.use('Agg')
@@ -747,7 +837,7 @@ plt.style.use('dark_background')
 
 @app.get("/api/v1/admin/usuarios/{usuario_id}/grafico-stats")
 async def grafico_stats_operario(usuario_id: int):
-    """Genera un gráfico de barras Seaborn/Matplotlib con el rendimiento semanal por turno del operario."""
+    """Genera un gráfico de LÍNEAS por máquina (Torno_1 vs Fresadora_1) agrupado por fecha limpia."""
     try:
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
@@ -755,50 +845,56 @@ async def grafico_stats_operario(usuario_id: int):
             user = await cur.fetchone()
 
             sql = """
-                SELECT a.fecha_inicio, m.nombre AS maquina,
-                       ROUND(a.tiempo_activo_segundos / 3600.0, 2) AS horas_activas,
-                       CASE 
-                           WHEN HOUR(a.fecha_inicio) BETWEEN 6 AND 13 THEN 'Mañana'
-                           WHEN HOUR(a.fecha_inicio) BETWEEN 14 AND 21 THEN 'Tarde'
-                           ELSE 'Noche'
-                       END AS turno
+                SELECT DATE(a.fecha_inicio) AS fecha, m.nombre AS maquina,
+                       ROUND(SUM(a.tiempo_activo_segundos) / 3600.0, 2) AS horas_activas
                 FROM actividades a
                 JOIN maquinas m ON a.maquina_id = m.id
                 WHERE a.operario_id = %s
-                ORDER BY a.fecha_inicio DESC
+                GROUP BY DATE(a.fecha_inicio), m.nombre
+                ORDER BY fecha ASC
             """
             await cur.execute(sql, (usuario_id,))
-            actividades = await cur.fetchall()
+            rows = await cur.fetchall()
         conn.close()
 
-        fig, ax = plt.subplots(figsize=(7.5, 4), dpi=130)
+        fig, ax = plt.subplots(figsize=(8.0, 4.2), dpi=130)
         fig.patch.set_facecolor('#1e293b')
         ax.set_facecolor('#0f172a')
 
-        if not actividades:
+        if not rows:
             ax.text(0.5, 0.5, 'Sin actividades registradas para este operario', ha='center', va='center', color='#94a3b8', fontsize=11)
             ax.axis('off')
         else:
-            shifts = {}
-            for a in actividades:
-                fecha_fmt = a['fecha_inicio'].strftime('%d/%m') if hasattr(a['fecha_inicio'], 'strftime') else str(a['fecha_inicio'])[:10]
-                lbl = f"{fecha_fmt}\nTurno {a['turno']}\n({a['maquina']})"
-                shifts[lbl] = shifts.get(lbl, 0.0) + float(a['horas_activas'])
+            # Organizar datos por fecha y máquina
+            fechas_set = sorted(list(set(r['fecha'].strftime('%Y-%m-%d') if hasattr(r['fecha'], 'strftime') else str(r['fecha'])[:10] for r in rows)))
+            
+            torno_data = {f: 0.0 for f in fechas_set}
+            fresa_data = {f: 0.0 for f in fechas_set}
 
-            labels = list(shifts.keys())
-            horas = list(shifts.values())
-            colors = ['#38bdf8' if 'Torno' in l else '#34d399' for l in labels]
+            for r in rows:
+                f_str = r['fecha'].strftime('%Y-%m-%d') if hasattr(r['fecha'], 'strftime') else str(r['fecha'])[:10]
+                m_name = r['maquina']
+                h_val = float(r['horas_activas'])
+                if 'Torno' in m_name:
+                    torno_data[f_str] += h_val
+                else:
+                    fresa_data[f_str] += h_val
 
-            bars = ax.bar(labels, horas, color=colors, edgecolor='#475569', width=0.45)
+            x_labels = [f[5:].replace('-', '/') for f in fechas_set] # Formato mm/dd corto y limpio
+            torno_y = [torno_data[f] for f in fechas_set]
+            fresa_y = [fresa_data[f] for f in fechas_set]
+
+            # Graficar líneas
+            ax.plot(x_labels, torno_y, marker='o', linewidth=2.5, color='#38bdf8', label='Torno 1')
+            ax.plot(x_labels, fresa_y, marker='s', linewidth=2.5, color='#34d399', label='Fresadora 1')
+
             ax.set_ylabel('Horas Operativas (hs)', color='#f8fafc', fontsize=10, fontweight='bold')
+            ax.set_xlabel('Fecha (Mes/Día)', color='#f8fafc', fontsize=10, fontweight='bold')
             nombre_user = user['nombre'] if user else f'Operario #{usuario_id}'
-            ax.set_title(f'Rendimiento Semanal por Turno - {nombre_user}', color='#38bdf8', fontsize=11, fontweight='bold', pad=12)
-            ax.grid(axis='y', color='#334155', linestyle='--', alpha=0.5)
-            ax.tick_params(colors='#f8fafc', labelsize=8)
-
-            for bar in bars:
-                h = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., h + 0.05, f"{h:.2f} hs", ha='center', va='bottom', color='#f8fafc', fontsize=8, fontweight='bold')
+            ax.set_title(f'Rendimiento Diario por Máquina - {nombre_user}', color='#38bdf8', fontsize=11, fontweight='bold', pad=12)
+            ax.grid(True, color='#334155', linestyle='--', alpha=0.6)
+            ax.tick_params(colors='#f8fafc', labelsize=8.5, rotation=30)
+            ax.legend(facecolor='#1e293b', edgecolor='#475569', labelcolor='#f8fafc', fontsize=9)
 
         plt.tight_layout()
         buf = io.BytesIO()
@@ -811,7 +907,7 @@ async def grafico_stats_operario(usuario_id: int):
 
 @app.get("/api/v1/admin/informes/grafico-turno")
 async def grafico_turno_admin():
-    """Genera un gráfico de barras horizontales de horas operativas por día y máquina (últimos 7 días)."""
+    """Genera un gráfico de barras comparativo de horas operativas por día y máquina (últimos 7 días)."""
     try:
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
@@ -836,19 +932,36 @@ async def grafico_turno_admin():
             ax.text(0.5, 0.5, 'Sin registros en los últimos 7 días', ha='center', va='center', color='#94a3b8', fontsize=11)
             ax.axis('off')
         else:
-            labels = [f"{r['fecha']}\n({r['maquina']})" for r in rows]
-            horas = [float(r['horas_activas']) for r in rows]
-            colors = ['#38bdf8' if 'Torno' in l else '#34d399' for l in labels]
+            fechas_set = sorted(list(set(r['fecha'].strftime('%Y-%m-%d') if hasattr(r['fecha'], 'strftime') else str(r['fecha'])[:10] for r in rows)))
+            torno_data = {f: 0.0 for f in fechas_set}
+            fresa_data = {f: 0.0 for f in fechas_set}
 
-            bars = ax.barh(labels, horas, color=colors, edgecolor='#475569', height=0.5)
-            ax.set_xlabel('Horas Operativas (hs)', color='#f8fafc', fontsize=10, fontweight='bold')
-            ax.set_title('Horas Operativas por Día y Máquina (Últimos 7 Días)', color='#38bdf8', fontsize=11, fontweight='bold', pad=12)
-            ax.grid(axis='x', color='#334155', linestyle='--', alpha=0.5)
-            ax.tick_params(colors='#f8fafc', labelsize=8)
+            for r in rows:
+                f_str = r['fecha'].strftime('%Y-%m-%d') if hasattr(r['fecha'], 'strftime') else str(r['fecha'])[:10]
+                m_name = r['maquina']
+                h_val = float(r['horas_activas'])
+                if 'Torno' in m_name:
+                    torno_data[f_str] += h_val
+                else:
+                    fresa_data[f_str] += h_val
 
-            for bar in bars:
-                w = bar.get_width()
-                ax.text(w + 0.1, bar.get_y() + bar.get_height()/2, f"{w:.2f} hs", va='center', ha='left', color='#f8fafc', fontsize=8, fontweight='bold')
+            x_labels = [f[5:].replace('-', '/') for f in fechas_set]
+            torno_y = [torno_data[f] for f in fechas_set]
+            fresa_y = [fresa_data[f] for f in fechas_set]
+
+            import numpy as np
+            x = np.arange(len(x_labels))
+            width = 0.35
+
+            rects1 = ax.bar(x - width/2, torno_y, width, label='Torno 1', color='#38bdf8', edgecolor='#475569')
+            rects2 = ax.bar(x + width/2, fresa_y, width, label='Fresadora 1', color='#34d399', edgecolor='#475569')
+
+            ax.set_ylabel('Horas Operativas (hs)', color='#f8fafc', fontsize=10, fontweight='bold')
+            ax.set_title('Horas Operativas Comparativas por Máquina (Últimos 7 Días)', color='#38bdf8', fontsize=11, fontweight='bold', pad=12)
+            ax.set_xticks(x)
+            ax.set_xticklabels(x_labels, color='#f8fafc', fontsize=9)
+            ax.grid(axis='y', color='#334155', linestyle='--', alpha=0.5)
+            ax.legend(facecolor='#1e293b', edgecolor='#475569', labelcolor='#f8fafc', fontsize=9)
 
         plt.tight_layout()
         buf = io.BytesIO()
@@ -908,5 +1021,3 @@ async def grafico_semana_admin():
         return Response(content=buf.getvalue(), media_type="image/png")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-

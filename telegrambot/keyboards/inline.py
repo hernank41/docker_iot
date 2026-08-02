@@ -69,11 +69,14 @@ def get_config_menu_keyboard(configs):
     keyboard.append([InlineKeyboardButton("[< Volver al Menú Admin]", callback_data="menu_admin")])
     return InlineKeyboardMarkup(keyboard)
 
-def get_operario_menu_keyboard():
+def get_operario_menu_keyboard(assigned_machine=None):
     keyboard = [
         [
-            InlineKeyboardButton("[Asignarme a Máquina]", callback_data="op_asignar_maquina"),
+            InlineKeyboardButton("[Fichar / Cambiar Máquina]", callback_data="op_asignar_maquina"),
             InlineKeyboardButton("[Seleccionar Herramienta]", callback_data="op_seleccionar_herramienta")
+        ],
+        [
+            InlineKeyboardButton("[Agregar Comentario a Actividad]", callback_data="op_agregar_comentario")
         ],
         [
             InlineKeyboardButton("[Finalizar Actividad]", callback_data="op_finalizar_actividad")
