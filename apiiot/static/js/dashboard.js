@@ -34,7 +34,8 @@ async function iniciarSesionWeb(e) {
         });
         const data = await res.json();
         if (res.ok && data.status === 'ok') {
-            window.location.reload();
+            document.cookie = "admin_session=authenticated; path=/; max-age=86400";
+            window.location.href = "/admin";
         } else {
             errorDiv.innerText = data.detail || "Usuario o contraseña de Administrador incorrectos.";
             errorDiv.classList.remove('d-none');
@@ -48,9 +49,11 @@ async function iniciarSesionWeb(e) {
 async function cerrarSesionWeb() {
     try {
         await fetch('/api/v1/admin/logout', { method: 'POST' });
-        window.location.reload();
+        document.cookie = "admin_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+        window.location.href = "/admin";
     } catch (e) {
-        window.location.reload();
+        document.cookie = "admin_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+        window.location.href = "/admin";
     }
 }
 

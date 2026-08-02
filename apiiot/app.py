@@ -120,7 +120,7 @@ async def login_endpoint(req: LoginRequest, response: Response):
         admin_pass_env = os.getenv("ADMIN_PASSWORD", "admin123")
         if req.password == admin_pass_env or req.password == "admin123":
             res = JSONResponse(content={"status": "ok", "usuario": user})
-            res.set_cookie(key="admin_session", value="authenticated", max_age=86400, httponly=False)
+            res.set_cookie(key="admin_session", value="authenticated", max_age=86400, path="/", httponly=False)
             return res
         
         raise HTTPException(status_code=401, detail="Contraseña incorrecta")
@@ -133,7 +133,7 @@ async def login_endpoint(req: LoginRequest, response: Response):
 async def logout_endpoint(response: Response):
     """Cierra la sesión del administrador limpiando la cookie."""
     res = JSONResponse(content={"status": "ok", "mensaje": "Sesión cerrada correctamente"})
-    res.delete_cookie("admin_session")
+    res.delete_cookie(key="admin_session", path="/")
     return res
 
 @app.get("/api/v1/usuarios")
