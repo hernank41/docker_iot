@@ -87,6 +87,20 @@ def get_operario_menu_keyboard(assigned_machine=None):
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def get_maquinas_select_keyboard(maquinas):
+    keyboard = []
+    for m in maquinas:
+        keyboard.append([InlineKeyboardButton(f"[{m['nombre']} ({m['tipo']})]", callback_data=f"op_select_mq_{m['id']}")])
+    keyboard.append([InlineKeyboardButton("[< Cancelar]", callback_data="show_start")])
+    return InlineKeyboardMarkup(keyboard)
+
+def get_herramientas_select_keyboard(herramientas):
+    keyboard = []
+    for h in herramientas:
+        keyboard.append([InlineKeyboardButton(f"[{h['nombre']} - Desgaste: {h.get('porcentaje_desgaste', 0.0)}%]", callback_data=f"op_select_h_{h['id']}")])
+    keyboard.append([InlineKeyboardButton("[< Cancelar]", callback_data="show_start")])
+    return InlineKeyboardMarkup(keyboard)
+
 def get_informes_keyboard():
     keyboard = [
         [
@@ -94,25 +108,19 @@ def get_informes_keyboard():
             InlineKeyboardButton("[Semana Completa]", callback_data="reporte_semana")
         ],
         [
+            InlineKeyboardButton("[Resumen Mes (30 Días)]", callback_data="reporte_mes"),
+            InlineKeyboardButton("[Desglose por Turnos]", callback_data="reporte_turnos_detalle")
+        ],
+        [
             InlineKeyboardButton("[< Volver al Menú Admin]", callback_data="menu_admin")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def get_maquinas_select_keyboard(maquinas, callback_prefix: str):
-    keyboard = []
-    for m in maquinas:
-        keyboard.append([InlineKeyboardButton(f"[{m['nombre']} - {m['tipo']}]", callback_data=f"{callback_prefix}_{m['id']}")])
-    keyboard.append([InlineKeyboardButton("[< Volver]", callback_data="menu_principal")])
-    return InlineKeyboardMarkup(keyboard)
-
-def get_herramientas_select_keyboard(herramientas, callback_prefix: str):
-    keyboard = []
-    for h in herramientas:
-        keyboard.append([InlineKeyboardButton(f"[{h['nombre']}]", callback_data=f"{callback_prefix}_{h['id']}")])
-    keyboard.append([InlineKeyboardButton("[< Volver]", callback_data="menu_principal")])
-    return InlineKeyboardMarkup(keyboard)
-
-def get_cancel_keyboard(return_callback="menu_admin"):
-    keyboard = [[InlineKeyboardButton("[Cancelar]", callback_data=return_callback)]]
+def get_cancel_keyboard(callback_data: str = "show_role_select"):
+    keyboard = [
+        [
+            InlineKeyboardButton("[< Cancelar / Volver]", callback_data=callback_data)
+        ]
+    ]
     return InlineKeyboardMarkup(keyboard)

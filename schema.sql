@@ -46,12 +46,20 @@ CREATE TABLE IF NOT EXISTS herramientas (
     FOREIGN KEY (maquina_id) REFERENCES maquinas(id) ON DELETE CASCADE
 );
 
--- Carga inicial de herramientas
+-- Carga inicial de herramientas con maquina/tipo/codigo
 INSERT INTO herramientas (maquina_id, nombre, horas_uso, horas_expectativa) VALUES
-(1, 'Cuchilla WNMG 080408 (Torno 1)', 38.50, 60.00),
-(1, 'Inserto Tronzador 3mm (Torno 1)', 12.00, 30.00),
-(2, 'Fresa Frontal Ø20mm (Fresadora 1)', 42.00, 50.00),
-(2, 'Fresa Planeadora Ø50mm (Fresadora 1)', 18.00, 80.00)
+(1, 'Torno_1 / Inserto de desbaste general / CNMG 120408', 35.58, 60.00),
+(1, 'Torno_1 / Inserto de desbaste general / WNMG 080408', 22.40, 60.00),
+(1, 'Torno_1 / Inserto de acabado y perfilado / DCMT 11T304', 12.00, 50.00),
+(1, 'Torno_1 / Inserto de acabado y perfilado / VBMT 160404', 18.20, 50.00),
+(1, 'Torno_1 / Inserto de tronzado y ranurado / MGMN 200', 25.50, 30.00),
+(1, 'Torno_1 / Inserto de tronzado y ranurado / MGMN 300', 8.40, 30.00),
+(2, 'Fresadora_1 / Mecha helicoidal estándar / DIN 338', 29.67, 40.00),
+(2, 'Fresadora_1 / Mecha helicoidal estándar / DIN 1897', 15.30, 40.00),
+(2, 'Fresadora_1 / Mecha de centrar / DIN 333-A', 41.20, 50.00),
+(2, 'Fresadora_1 / Mecha de centrar / DIN 333-R', 10.50, 50.00),
+(2, 'Fresadora_1 / Mecha de puntear (NC Drill) / DIN 1836', 52.80, 60.00),
+(2, 'Fresadora_1 / Mecha de puntear (NC Drill) / DIN 6539', 5.20, 60.00)
 ON DUPLICATE KEY UPDATE nombre=nombre;
 
 -- 4. Tabla de Asignación Actual de Máquinas
@@ -59,14 +67,15 @@ CREATE TABLE IF NOT EXISTS asignaciones_actuales (
     maquina_id INT PRIMARY KEY,
     operario_id INT NULL,
     herramienta_id INT NULL,
+    comentario VARCHAR(255) NULL,
     FOREIGN KEY (maquina_id) REFERENCES maquinas(id),
     FOREIGN KEY (operario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
     FOREIGN KEY (herramienta_id) REFERENCES herramientas(id) ON DELETE SET NULL
 );
 
-INSERT INTO asignaciones_actuales (maquina_id, operario_id, herramienta_id) VALUES
-(1, 2, 1),
-(2, 3, 3)
+INSERT INTO asignaciones_actuales (maquina_id, operario_id, herramienta_id, comentario) VALUES
+(1, 2, 2, 'Operación normal'),
+(2, 3, 7, 'Operación normal')
 ON DUPLICATE KEY UPDATE maquina_id=maquina_id;
 
 -- 5. Registro de cambios de estado en tiempo real (Telemetría de contactores)
@@ -127,26 +136,3 @@ INSERT INTO configuracion_sistema (clave, valor, descripcion) VALUES
 ('turno_noche_inicio', '22:00', 'Hora inicio turno noche'),
 ('turno_noche_fin', '06:00', 'Hora fin turno noche')
 ON DUPLICATE KEY UPDATE valor=VALUES(valor);
-
--- 9. Datos Semilla de Actividades (Lunes a Jueves - Turnos Mañana 07-12h y Tarde 14-17h)
--- Lunes 2026-07-27 (Turno Mañana: Juan Perez en Torno 1, Turno Tarde: Carlos Gomez en Fresadora 1)
-INSERT INTO actividades (maquina_id, operario_id, herramienta_id, fecha_inicio, fecha_fin, tiempo_activo_segundos, estado, comentario) VALUES
-(1, 2, 1, '2026-07-27 07:15:00', '2026-07-27 08:45:00', 5150, 'FINALIZADA', 'Mecanizado de ejes de acero 1045'),
-(1, 2, 1, '2026-07-27 09:30:00', '2026-07-27 11:20:00', 6300, 'FINALIZADA', 'Roscado y desbaste exterior batch A'),
-(2, 3, 3, '2026-07-27 14:10:00', '2026-07-27 16:00:00', 6100, 'FINALIZADA', 'Planeado de placas base de lubricación');
-
--- Martes 2026-07-28 (Turno Mañana: Carlos Gomez en Fresadora 1, Turno Tarde vacio en Torno 1)
-INSERT INTO actividades (maquina_id, operario_id, herramienta_id, fecha_inicio, fecha_fin, tiempo_activo_segundos, estado, comentario) VALUES
-(2, 3, 3, '2026-07-28 07:30:00', '2026-07-28 09:10:00', 5700, 'FINALIZADA', 'Ranurado de chaveteros de precisión'),
-(2, 3, 4, '2026-07-28 10:00:00', '2026-07-28 11:45:00', 5850, 'FINALIZADA', 'Fresado perimetral de soportes rectificados');
-
--- Miércoles 2026-07-29 (Turno Mañana: Juan Perez en Torno 1, Turno Tarde: Juan Perez en Torno 1)
-INSERT INTO actividades (maquina_id, operario_id, herramienta_id, fecha_inicio, fecha_fin, tiempo_activo_segundos, estado, comentario) VALUES
-(1, 2, 1, '2026-07-29 07:05:00', '2026-07-29 08:35:00', 5100, 'FINALIZADA', 'Cilindrado de bujes de bronce'),
-(1, 2, 2, '2026-07-29 09:00:00', '2026-07-29 10:40:00', 5600, 'FINALIZADA', 'Tronzado de piezas de serie 200'),
-(1, 2, 1, '2026-07-29 14:15:00', '2026-07-29 15:50:00', 5200, 'FINALIZADA', 'Rectificado y pulido final de ejes');
-
--- Jueves 2026-07-30 (Turno Mañana: Carlos Gomez en Fresadora 1)
-INSERT INTO actividades (maquina_id, operario_id, herramienta_id, fecha_inicio, fecha_fin, tiempo_activo_segundos, estado, comentario) VALUES
-(2, 3, 3, '2026-07-30 07:45:00', '2026-07-30 09:30:00', 5900, 'FINALIZADA', 'Taladrado y mandrinado de carcasa de engranajes'),
-(2, 3, 3, '2026-07-30 10:15:00', '2026-07-30 11:50:00', 5400, 'FINALIZADA', 'Control dimensional y biselado de bordes');

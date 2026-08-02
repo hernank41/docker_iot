@@ -57,6 +57,17 @@ async function cerrarSesionWeb() {
     }
 }
 
+function formatDuracionSegundos(sec) {
+    if (isNaN(sec) || sec < 0) sec = 0;
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    if (h > 0) {
+        return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
+    }
+    return `${m}m ${s.toString().padStart(2, '0')}s`;
+}
+
 // 1. Dashboard Monitoreo en Tiempo Real
 async function loadDashboardData() {
     try {
@@ -64,23 +75,72 @@ async function loadDashboardData() {
         const container = document.getElementById('cards-maquinas-container');
         if (!container) return;
 
+        const now = new Date();
         let html = '';
+
         data.maquinas.forEach(m => {
-            const isActiva = m.estado === 'ACTIVA';
-            const isEmergencia = m.estado === 'PARADA_EMERGENCIA';
-            const badgeClass = isActiva ? 'bg-success' : (isEmergencia ? 'bg-danger' : 'bg-warning text-dark');
-            
+            const estadoUpper = (m.estado || 'PARADA').toUpperCase();
+            const enActividad = !!m.en_actividad;
+
+            let badgeClass = '';
+            let cardBorderClass = '';
+            let badgeText = estadoUpper;
+            let timerHtml = '';
+
+            if (estadoUpper === 'PARADA_EMERGENCIA') {
+                badgeClass = 'bg-danger text-white';
+                cardBorderClass = 'border-danger';
+                badgeText = 'PARADA DE EMERGENCIA';
+                if (m.ultimo_estado_timestamp) {
+                    const secEstado = Math.floor((now - new Date(m.ultimo_estado_timestamp)) / 1000);
+                    timerHtml = `<p class="card-text mb-1 text-danger fw-bold"><strong>Tiempo en emergencia:</strong> ${formatDuracionSegundos(secEstado)}</p>`;
+                }
+            } else if (enActividad && estadoUpper === 'ACTIVA') {
+                badgeClass = 'bg-success text-white';
+                cardBorderClass = 'border-success';
+                badgeText = 'ACTIVA';
+
+                const secEstado = m.ultimo_estado_timestamp ? Math.floor((now - new Date(m.ultimo_estado_timestamp)) / 1000) : 0;
+                const secSesion = m.actividad_fecha_inicio ? Math.floor((now - new Date(m.actividad_fecha_inicio)) / 1000) : 0;
+
+                timerHtml = `
+                    <div class="mt-2 pt-2 border-top border-secondary">
+                        <p class="card-text mb-1 text-success"><strong>Tiempo en estado activo (última señal):</strong> ${formatDuracionSegundos(secEstado)}</p>
+                        <p class="card-text mb-1 text-success"><strong>Tiempo total de sesión activa:</strong> ${formatDuracionSegundos(secSesion)}</p>
+                    </div>
+                `;
+            } else if (enActividad && estadoUpper === 'PARADA') {
+                badgeClass = 'bg-primary text-white';
+                cardBorderClass = 'border-primary';
+                badgeText = 'PAUSADA EN SESIÓN';
+
+                const secEstado = m.ultimo_estado_timestamp ? Math.floor((now - new Date(m.ultimo_estado_timestamp)) / 1000) : 0;
+                const secSesion = m.actividad_fecha_inicio ? Math.floor((now - new Date(m.actividad_fecha_inicio)) / 1000) : 0;
+
+                timerHtml = `
+                    <div class="mt-2 pt-2 border-top border-secondary">
+                        <p class="card-text mb-1 text-primary"><strong>Tiempo detenido (pausa desde última señal):</strong> ${formatDuracionSegundos(secEstado)}</p>
+                        <p class="card-text mb-1 text-primary"><strong>Tiempo acumulado de sesión:</strong> ${formatDuracionSegundos(secSesion)}</p>
+                    </div>
+                `;
+            } else {
+                badgeClass = 'bg-warning text-dark';
+                cardBorderClass = 'border-warning';
+                badgeText = 'PARADA';
+            }
+
             html += `
                 <div class="col-md-6 mb-4">
-                    <div class="card h-100 border-start border-4 ${isActiva ? 'border-success' : (isEmergencia ? 'border-danger' : 'border-warning')}">
+                    <div class="card h-100 border-start border-4 ${cardBorderClass}">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="card-title mb-0">${m.maquina} (${m.tipo})</h5>
-                            <span class="badge ${badgeClass} fs-6">${m.estado}</span>
+                            <span class="badge ${badgeClass} fs-6">${badgeText}</span>
                         </div>
                         <div class="card-body">
                             <p class="card-text mb-2"><strong>Operario:</strong> ${m.operario_nombre || 'Sin Operario'}</p>
                             <p class="card-text mb-2"><strong>Herramienta:</strong> ${m.herramienta_nombre || 'Sin Herramienta'}</p>
                             <p class="card-text mb-2"><strong>Causa / Estado:</strong> <code class="text-info">${m.causa || 'OPERACION_NORMAL'}</code></p>
+                            ${timerHtml}
                         </div>
                     </div>
                 </div>
@@ -152,26 +212,14 @@ async function eliminarOperario(id) {
 }
 
 async function verStatsOperario(id, nombre) {
-    try {
-        const stats = await API.get(`/api/v1/usuarios/${id}/stats`);
-        const u = stats.usuario;
-        const r = stats.resumen;
-        
-        document.getElementById('stats-op-title').innerText = `Rendimiento de Operario: ${nombre}`;
-        let infoHtml = `<p class="mb-1"><strong>Username:</strong> <code>@${u.username}</code> | <strong>Total Sesiones:</strong> <code>${r.total_actividades}</code> | <strong>Horas Totales:</strong> <code>${r.total_horas} hs</code></p>`;
-        document.getElementById('stats-op-info').innerHTML = infoHtml;
-        
-        // Cargar imagen de gráfico de líneas dinámico de Matplotlib
-        const chartImg = document.getElementById('stats-op-chart');
-        chartImg.src = `/api/v1/admin/usuarios/${id}/grafico-stats?t=${new Date().getTime()}`;
-
-        new bootstrap.Modal(document.getElementById('modalStatsOperario')).show();
-    } catch (e) {
-        alert("Error al cargar estadísticas.");
-    }
+    const img = document.getElementById('img-operario-stats');
+    img.src = `/api/v1/admin/usuarios/${id}/grafico-stats?t=${Date.now()}`;
+    document.getElementById('modalStatsLabel').innerText = `Estadísticas de Desempeño: ${nombre}`;
+    const modal = new bootstrap.Modal(document.getElementById('modalOperarioStats'));
+    modal.show();
 }
 
-// 3. Herramientas y Desgaste
+// 3. Control y Gestión de Herramientas
 async function loadHerramientas() {
     try {
         const data = await API.get('/api/v1/herramientas');
@@ -180,11 +228,10 @@ async function loadHerramientas() {
 
         let html = '';
         data.herramientas.forEach(h => {
-            const pct = parseFloat(h.porcentaje_desgaste || 0);
-            let barClass = 'bg-success';
-            if (pct >= 70 && pct < 90) barClass = 'bg-warning text-dark';
-            if (pct >= 90) barClass = 'bg-danger';
-
+            const porcentaje = h.porcentaje_desgaste || 0;
+            const isHigh = porcentaje >= 90;
+            const progressClass = isHigh ? 'bg-danger' : (porcentaje >= 60 ? 'bg-warning' : 'bg-success');
+            
             html += `
                 <tr>
                     <td>${h.id}</td>
@@ -192,196 +239,276 @@ async function loadHerramientas() {
                     <td>${h.maquina_nombre}</td>
                     <td>${h.horas_uso} hs / ${h.horas_expectativa} hs</td>
                     <td style="width: 250px;">
-                        <div class="progress" style="height: 20px;">
-                            <div class="progress-bar ${barClass}" role="progressbar" style="width: ${Math.min(pct, 100)}%;">
-                                ${pct.toFixed(1)}%
+                        <div class="progress position-relative" style="height: 22px;">
+                            <div class="progress-bar ${progressClass}" role="progressbar" style="width: ${porcentaje}%;">
+                                ${porcentaje}%
                             </div>
                         </div>
+                    </td>
+                    <td>
+                        ${isHigh ? '<span class="badge bg-danger">DESGASTE ALTO</span>' : '<span class="badge bg-success">OK</span>'}
                     </td>
                 </tr>
             `;
         });
         tbody.innerHTML = html;
-        loadMaquinasSelectOptions();
     } catch (e) {
         console.error("Error cargando herramientas:", e);
     }
 }
 
-async function loadMaquinasSelectOptions() {
-    try {
-        const res = await API.get('/api/v1/maquinas');
-        const select = document.getElementById('h-maquina-id');
-        if (!select) return;
-        select.innerHTML = res.maquinas.map(m => `<option value="${m.id}">${m.nombre} (${m.tipo})</option>`).join('');
-    } catch (e) {}
-}
-
 async function guardarNuevaHerramienta() {
-    const maquina_id = parseInt(document.getElementById('h-maquina-id').value);
+    const maquina_id = document.getElementById('h-maquina-id').value;
     const nombre = document.getElementById('h-nombre').value.trim();
-    const horas_expectativa = parseFloat(document.getElementById('h-expectativa').value);
+    const horas_expectativa = document.getElementById('h-horas').value;
 
-    if (!nombre || isNaN(horas_expectativa)) return alert("Complete los datos requeridos.");
+    if (!nombre || !horas_expectativa) return alert("Complete todos los campos.");
 
     try {
-        await API.post('/api/v1/herramientas', { maquina_id, nombre, horas_expectativa });
+        await API.post('/api/v1/herramientas', {
+            maquina_id: parseInt(maquina_id),
+            nombre,
+            horas_expectativa: parseFloat(horas_expectativa)
+        });
         bootstrap.Modal.getInstance(document.getElementById('modalCrearHerramienta')).hide();
         document.getElementById('formCrearHerramienta').reset();
         loadHerramientas();
     } catch (e) {
-        alert("Error registrando herramienta.");
+        alert("Error creando herramienta.");
     }
 }
 
-// 4. Control de Actividades (Fit: Merge & Split)
+// 4. Control de Actividades (Fit)
 let actividadesData = [];
+
 async function loadActividades() {
     try {
         const res = await API.get('/api/v1/admin/actividades');
         actividadesData = res.actividades;
-        const tbody = document.getElementById('tabla-actividades-body');
-        if (!tbody) return;
-
-        let html = '';
-        actividadesData.forEach(a => {
-            html += `
-                <tr>
-                    <td><input type="checkbox" class="form-check-input chk-merge" value="${a.id}"></td>
-                    <td>#${a.id}</td>
-                    <td><strong>${a.maquina}</strong></td>
-                    <td>${a.operario_nombre || '<span class="badge bg-warning text-dark">Sin Operario</span>'}</td>
-                    <td>${a.herramienta_nombre || 'N/A'}</td>
-                    <td><small>${a.fecha_inicio}</small></td>
-                    <td><small>${a.fecha_fin || 'En Curso'}</small></td>
-                    <td><code>${a.tiempo_activo_horas} hs</code></td>
-                    <td><small class="text-muted">${a.comentario || '-'}</small></td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-primary py-0" onclick="prepararSplit(${a.id}, '${a.fecha_inicio}', '${a.fecha_fin || ''}')">Split</button>
-                        <button class="btn btn-sm btn-outline-secondary py-0" onclick="prepararAsignarOperario(${a.id})">Asignar</button>
-                    </td>
-                </tr>
-            `;
-        });
-        tbody.innerHTML = html;
+        renderActividadesTabla();
     } catch (e) {
         console.error("Error cargando actividades:", e);
     }
 }
 
-async function ejecutarMerge() {
-    const selected = Array.from(document.querySelectorAll('.chk-merge:checked')).map(cb => parseInt(cb.value));
-    if (selected.length < 2) return alert("Seleccione al menos 2 actividades con la casilla de verificación para fusionar.");
+function renderActividadesTabla() {
+    const tbody = document.getElementById('tabla-actividades-body');
+    if (!tbody) return;
 
-    if (!confirm(`¿Confirma la fusión de ${selected.length} actividades seleccionadas en un único registro?`)) return;
+    let html = '';
+    actividadesData.forEach(a => {
+        const isEnCurso = a.estado === 'EN_CURSO';
+        const estadoBadge = isEnCurso ? '<span class="badge bg-success">EN_CURSO</span>' : `<span class="badge bg-secondary">${a.estado}</span>`;
+        const fechaFinStr = a.fecha_fin ? a.fecha_fin.replace('T', ' ') : '<em>En ejecución</em>';
+        
+        html += `
+            <tr>
+                <td><input type="checkbox" class="chk-actividad form-check-input" value="${a.id}"></td>
+                <td>#${a.id}</td>
+                <td><strong>${a.maquina}</strong></td>
+                <td>${a.operario_nombre || '<span class="text-muted">Sin Asignar</span>'}</td>
+                <td>${a.herramienta_nombre || '<span class="text-muted">Sin Asignar</span>'}</td>
+                <td><small>${a.fecha_inicio.replace('T', ' ')}</small></td>
+                <td><small>${fechaFinStr}</small></td>
+                <td>${a.tiempo_activo_horas} hs</td>
+                <td>${estadoBadge}</td>
+                <td><small>${a.comentario || '-'}</small></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-warning me-1" onclick="abrirModalSplit(${a.id})">Split</button>
+                    <button class="btn btn-sm btn-outline-info" onclick="abrirModalReasignar(${a.id})">Reasignar</button>
+                </td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+}
+
+async function ejecutarMerge() {
+    const seleccionados = Array.from(document.querySelectorAll('.chk-actividad:checked')).map(cb => parseInt(cb.value));
+    if (seleccionados.length < 2) return alert("Seleccione al menos 2 actividades para fusionar.");
+
+    if (!confirm(`¿Desea fusionar las ${seleccionados.length} actividades seleccionadas?`)) return;
 
     try {
-        await API.post('/api/v1/admin/actividades/merge', { actividad_ids: selected });
+        await API.post('/api/v1/admin/actividades/merge', { actividad_ids: seleccionados });
+        alert("Actividades fusionadas correctamente.");
         loadActividades();
     } catch (e) {
         alert("Error al fusionar actividades.");
     }
 }
 
-function prepararSplit(id, inicio, fin) {
-    document.getElementById('split-act-id').value = id;
-    document.getElementById('split-corte').value = inicio;
-    new bootstrap.Modal(document.getElementById('modalSplitActividad')).show();
+function abrirModalSplit(actividadId) {
+    document.getElementById('split-actividad-id').value = actividadId;
+    const modal = new bootstrap.Modal(document.getElementById('modalSplitActividad'));
+    modal.show();
 }
 
 async function ejecutarSplit() {
-    const id = document.getElementById('split-act-id').value;
-    const fecha_corte = document.getElementById('split-corte').value.trim();
+    const actividadId = document.getElementById('split-actividad-id').value;
+    const fechaCorte = document.getElementById('split-fecha-corte').value.trim();
+
+    if (!fechaCorte) return alert("Ingrese la fecha y hora de corte (YYYY-MM-DD HH:MM:SS).");
 
     try {
-        await API.post(`/api/v1/admin/actividades/${id}/split`, { fecha_corte });
+        await API.post(`/api/v1/admin/actividades/${actividadId}/split`, { fecha_corte: fechaCorte });
         bootstrap.Modal.getInstance(document.getElementById('modalSplitActividad')).hide();
+        alert("Actividad dividida correctamente.");
         loadActividades();
     } catch (e) {
-        alert("Error al dividir actividad. Verifique el formato de fecha (YYYY-MM-DD HH:MM:SS).");
+        alert("Error al realizar split de la actividad.");
     }
 }
 
-async function prepararAsignarOperario(actId) {
+async function abrirModalReasignar(actividadId) {
+    document.getElementById('reasignar-actividad-id').value = actividadId;
+    
+    const data = await API.get('/api/v1/usuarios');
+    const select = document.getElementById('select-operario-reasignar');
+    select.innerHTML = '<option value="">Seleccione Operario...</option>';
+    data.usuarios.forEach(u => {
+        if (u.rol === 'OPERARIO') {
+            select.innerHTML += `<option value="${u.id}">${u.nombre} (@${u.username})</option>`;
+        }
+    });
+
+    const modal = new bootstrap.Modal(document.getElementById('modalReasignarOperario'));
+    modal.show();
+}
+
+async function ejecutarReasignacion() {
+    const actividadId = document.getElementById('reasignar-actividad-id').value;
+    const operarioId = document.getElementById('select-operario-reasignar').value;
+
+    if (!operarioId) return alert("Seleccione un operario.");
+
     try {
-        const users = await API.get('/api/v1/usuarios');
-        const operarios = users.usuarios.filter(u => u.rol === 'OPERARIO');
-        const opId = prompt("Ingrese ID de Operario a asignar:\n" + operarios.map(o => `${o.id}: ${o.nombre}`).join('\n'));
-        if (!opId) return;
-
-        await API.post(`/api/v1/admin/actividades/${actId}/asignar-operario`, { operario_id: parseInt(opId) });
+        await API.post(`/api/v1/admin/actividades/${actividadId}/asignar-operario`, { operario_id: parseInt(operarioId) });
+        bootstrap.Modal.getInstance(document.getElementById('modalReasignarOperario')).hide();
+        alert("Operario reasignado a la actividad correctamente.");
         loadActividades();
     } catch (e) {
-        alert("Error al asignar operario retroactivo.");
+        alert("Error reasignando operario.");
     }
 }
 
-// 5. Informes & KPIs
+// 5. Informes & Analítica de Planta (Carga los 4 Gráficos: Mes, Turnos, Día y Semana)
 async function loadInformes() {
     try {
-        const resTurno = await API.get('/api/v1/informes/reporte-turno');
-        const resSemana = await API.get('/api/v1/informes/reporte-semana');
-        
-        let htmlTurno = '<ul class="list-group list-group-flush mb-3">';
-        resTurno.reporte_turno.slice(0, 8).forEach(t => {
-            htmlTurno += `<li class="list-group-item bg-transparent text-light border-secondary px-0"><strong>${t.fecha} (${t.maquina}):</strong> ${t.horas_activas} hs (${t.total_actividades} sesiones)</li>`;
-        });
-        htmlTurno += '</ul>';
+        const turnoData = await API.get('/api/v1/informes/reporte-turno');
+        const turnosDetalleData = await API.get('/api/v1/informes/reporte-turnos-detalle');
 
-        let htmlSemana = '<ul class="list-group list-group-flush mb-3">';
-        resSemana.reporte_semana.forEach(s => {
-            htmlSemana += `<li class="list-group-item bg-transparent text-light border-secondary px-0"><strong>${s.maquina}:</strong> ${s.total_horas_activas} hs operativas totales</li>`;
-        });
-        htmlSemana += '</ul>';
+        // Render Turno Tabla (7 Días)
+        const tbodyTurno = document.getElementById('tabla-reporte-turno-body');
+        if (tbodyTurno) {
+            let html = '';
+            turnoData.reporte_turno.forEach(r => {
+                html += `
+                    <tr>
+                        <td>${r.fecha}</td>
+                        <td><strong>${r.maquina}</strong></td>
+                        <td>${r.total_actividades}</td>
+                        <td>${r.horas_activas} hs</td>
+                        <td><small>${r.operarios || 'Sin Operario'}</small></td>
+                    </tr>
+                `;
+            });
+            tbodyTurno.innerHTML = html;
+        }
 
-        document.getElementById('informes-turno-text').innerHTML = htmlTurno;
-        document.getElementById('informes-semana-text').innerHTML = htmlSemana;
+        // Render Shift Breakdown Tabla
+        const tbodyTurnosDetalle = document.getElementById('tabla-reporte-turnos-detalle-body');
+        if (tbodyTurnosDetalle) {
+            let html = '';
+            turnosDetalleData.turnos_detalle.forEach(r => {
+                html += `
+                    <tr>
+                        <td><strong>${r.turno}</strong></td>
+                        <td>${r.actividades_count} sesiones</td>
+                        <td>${r.horas_activas} hs</td>
+                    </tr>
+                `;
+            });
+            tbodyTurnosDetalle.innerHTML = html;
+        }
 
-        const ts = new Date().getTime();
-        document.getElementById('informes-turno-img').src = `/api/v1/admin/informes/grafico-turno?t=${ts}`;
-        document.getElementById('informes-semana-img').src = `/api/v1/admin/informes/grafico-semana?t=${ts}`;
+        // Refresh Matplotlib dynamic plots (All 4 charts)
+        const timestamp = Date.now();
+
+        const imgMes = document.getElementById('img-grafico-mes');
+        if (imgMes) imgMes.src = `/api/v1/admin/informes/grafico-mes?t=${timestamp}`;
+
+        const imgTurnosDetalle = document.getElementById('img-grafico-turnos-detalle');
+        if (imgTurnosDetalle) imgTurnosDetalle.src = `/api/v1/admin/informes/grafico-turnos-detalle?t=${timestamp}`;
+
+        const imgTurno = document.getElementById('img-grafico-turno');
+        if (imgTurno) imgTurno.src = `/api/v1/admin/informes/grafico-turno?t=${timestamp}`;
+
+        const imgSemana = document.getElementById('img-grafico-semana');
+        if (imgSemana) imgSemana.src = `/api/v1/admin/informes/grafico-semana?t=${timestamp}`;
+
     } catch (e) {
         console.error("Error cargando informes:", e);
     }
 }
 
-function exportarCSV() {
-    window.location.href = '/api/v1/admin/informes/exportar-csv';
-}
-
-// 6. Configuración Global
+// 6. Configuración del Sistema
 async function loadConfiguracion() {
     try {
-        const data = await API.get('/api/v1/configuracion');
-        const cfg = data.configuracion || {};
+        const res = await API.get('/api/v1/configuracion');
+        const cfg = res.configuracion;
 
-        if (cfg.inactividad_minutos) document.getElementById('cfg-timeout').value = cfg.inactividad_minutos;
-        if (cfg.inicio_turno_manana) document.getElementById('cfg-manana').value = cfg.inicio_turno_manana;
-        if (cfg.fin_turno_manana) document.getElementById('cfg-fin-manana').value = cfg.fin_turno_manana;
-        if (cfg.inicio_turno_tarde) document.getElementById('cfg-tarde').value = cfg.inicio_turno_tarde;
-        if (cfg.fin_turno_tarde) document.getElementById('cfg-fin-tarde').value = cfg.fin_turno_tarde;
-        if (cfg.inicio_turno_noche) document.getElementById('cfg-noche').value = cfg.inicio_turno_noche;
-        if (cfg.fin_turno_noche) document.getElementById('cfg-fin-noche').value = cfg.fin_turno_noche;
+        document.getElementById('cfg-inactividad').value = cfg.inactividad_minutos || 10;
+        document.getElementById('cfg-manana-init').value = cfg.inicio_turno_manana || '07:00';
+        document.getElementById('cfg-manana-end').value = cfg.fin_turno_manana || '12:00';
+        document.getElementById('cfg-tarde-init').value = cfg.inicio_turno_tarde || '14:00';
+        document.getElementById('cfg-tarde-end').value = cfg.fin_turno_tarde || '17:00';
+        document.getElementById('cfg-noche-init').value = cfg.inicio_turno_noche || '22:00';
+        document.getElementById('cfg-noche-end').value = cfg.fin_turno_noche || '06:00';
     } catch (e) {
         console.error("Error cargando configuración:", e);
     }
 }
 
-async function guardarConfiguracion() {
+async function guardarConfiguracion(e) {
+    e.preventDefault();
     const items = [
-        { clave: 'inactividad_minutos', valor: document.getElementById('cfg-timeout').value },
-        { clave: 'inicio_turno_manana', valor: document.getElementById('cfg-manana').value },
-        { clave: 'fin_turno_manana', valor: document.getElementById('cfg-fin-manana').value },
-        { clave: 'inicio_turno_tarde', valor: document.getElementById('cfg-tarde').value },
-        { clave: 'fin_turno_tarde', valor: document.getElementById('cfg-fin-tarde').value },
-        { clave: 'inicio_turno_noche', valor: document.getElementById('cfg-noche').value },
-        { clave: 'fin_turno_noche', valor: document.getElementById('cfg-fin-noche').value }
+        { clave: 'inactividad_minutos', valor: document.getElementById('cfg-inactividad').value },
+        { clave: 'inicio_turno_manana', valor: document.getElementById('cfg-manana-init').value },
+        { clave: 'fin_turno_manana', valor: document.getElementById('cfg-manana-end').value },
+        { clave: 'inicio_turno_tarde', valor: document.getElementById('cfg-tarde-init').value },
+        { clave: 'fin_turno_tarde', valor: document.getElementById('cfg-tarde-end').value },
+        { clave: 'inicio_turno_noche', valor: document.getElementById('cfg-noche-init').value },
+        { clave: 'fin_turno_noche', valor: document.getElementById('cfg-noche-end').value }
     ];
 
     try {
-        await API.post('/api/v1/admin/configuracion', { items });
-        alert("Configuración guardada exitosamente.");
+        await API.post('/api/v1/configuracion', { items });
+        alert("Configuración del sistema guardada exitosamente.");
     } catch (e) {
-        alert("Error al guardar configuración.");
+        alert("Error guardando configuración.");
     }
 }
+
+// Helper genérico para llamadas API Fetch
+const API = {
+    async get(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(await res.text());
+        return await res.json();
+    },
+    async post(url, data) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) throw new Error(await res.text());
+        return await res.json();
+    },
+    async delete(url) {
+        const res = await fetch(url, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await res.text());
+        return await res.json();
+    }
+};

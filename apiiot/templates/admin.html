@@ -3,312 +3,382 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Industrial IoT - Panel Web Administrador</title>
+    <title>Panel de Administración - Industrial IoT Stack</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
     <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Custom Dark Theme CSS -->
-    <link href="/static/css/admin.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/admin.css">
 </head>
-<body>
+<body class="bg-dark text-light">
 
-    <!-- Header / Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
-        <div class="container-fluid">
-            <a class="navbar-brand fw-bold text-info" href="#">Industrial IoT Stack | Panel Admin</a>
-            <div class="d-flex align-items-center gap-3">
-                <span class="navbar-text text-muted small">v2.0.0</span>
-                {% if authenticated %}
-                <button class="btn btn-outline-danger btn-sm" onclick="cerrarSesionWeb()">Cerrar Sesión</button>
-                {% endif %}
+{% if not authenticated %}
+    <!-- Formulario de Inicio de Sesión de Administrador -->
+    <div class="container d-flex justify-content-center align-items-center vh-100">
+        <div class="card p-4 shadow-lg border-secondary bg-dark-subtle text-light" style="max-width: 420px; width: 100%;">
+            <div class="text-center mb-4">
+                <h3 class="fw-bold text-info">Monitoreo Industrial IoT</h3>
+                <p class="text-muted">Inicio de Sesión de Administrador</p>
             </div>
+            <form onsubmit="iniciarSesionWeb(event)">
+                <div class="mb-3">
+                    <label for="login-username" class="form-label fw-bold">Usuario Administrador</label>
+                    <input type="text" class="form-control bg-dark text-light border-secondary" id="login-username" placeholder="ej: admin" required>
+                </div>
+                <div class="mb-4">
+                    <label for="login-password" class="form-label fw-bold">Contraseña</label>
+                    <input type="password" class="form-control bg-dark text-light border-secondary" id="login-password" placeholder="••••••••" required>
+                </div>
+                <div id="login-error" class="alert alert-danger d-none mb-3" role="alert"></div>
+                <button type="submit" class="btn btn-info w-100 fw-bold">Iniciar Sesión Administrador</button>
+            </form>
         </div>
-    </nav>
+    </div>
+{% else %}
+    <!-- SPA Panel Principal de Administración -->
+    <div class="d-flex">
+        <!-- Sidebar Navigation -->
+        <div class="d-flex flex-column flex-shrink-0 p-3 bg-black border-end border-secondary" style="width: 260px; min-height: 100vh;">
+            <a href="/" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-light text-decoration-none">
+                <span class="fs-4 fw-bold text-info">IoT Industrial</span>
+            </a>
+            <hr class="border-secondary">
+            <ul class="nav nav-pills flex-column mb-auto" id="adminTab" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active text-light w-100 text-start" data-bs-toggle="pill" data-bs-target="#monitoreo" type="button" role="tab">Dashboard En Vivo</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link text-light w-100 text-start" data-bs-toggle="pill" data-bs-target="#operarios" type="button" role="tab">Gestión Operarios</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link text-light w-100 text-start" data-bs-toggle="pill" data-bs-target="#herramientas" type="button" role="tab">Herramientas & Vida Útil</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link text-light w-100 text-start" data-bs-toggle="pill" data-bs-target="#actividades" type="button" role="tab">Control Actividades (Fit)</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link text-light w-100 text-start" data-bs-toggle="pill" data-bs-target="#informes" type="button" role="tab">Informes & Analítica</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link text-light w-100 text-start" data-bs-toggle="pill" data-bs-target="#configuracion" type="button" role="tab">Configuración Planta</button>
+                </li>
+            </ul>
+            <hr class="border-secondary">
+            <button class="btn btn-outline-danger w-100 btn-sm fw-bold" onclick="cerrarSesionWeb()">Cerrar Sesión Admin</button>
+        </div>
 
-    <!-- Main Container -->
-    <div class="container-fluid px-4">
-        
-        {% if not authenticated %}
-        <!-- Formulario de Login de Administrador -->
-        <div class="row justify-content-center mt-5">
-            <div class="col-md-4">
-                <div class="card shadow border-info">
-                    <div class="card-header bg-dark text-info fw-bold text-center py-3">
-                        <h4 class="mb-0">Acceso Administrador</h4>
+        <!-- Main Content View -->
+        <div class="flex-grow-1 p-4 bg-dark text-light" style="overflow-y: auto; height: 100vh;">
+            <div class="tab-content" id="adminTabContent">
+                
+                <!-- Vista 1: Monitoreo en Tiempo Real -->
+                <div class="tab-pane fade show active" id="monitoreo" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="fw-bold text-light mb-0">Estado de Planta en Tiempo Real</h4>
+                        <span class="badge bg-secondary">Actualización cada 5s</span>
                     </div>
-                    <div class="card-body p-4">
-                        <form id="formWebLogin" onsubmit="iniciarSesionWeb(event)">
-                            <div class="mb-3">
-                                <label class="form-label text-light">Usuario de Administrador:</label>
-                                <input type="text" class="form-control" id="login-username" value="admin" required>
+                    <div class="row" id="cards-maquinas-container">
+                        <div class="col-12 text-center text-muted py-5">Cargando telemetría de máquinas...</div>
+                    </div>
+                </div>
+
+                <!-- Vista 2: Gestión de Operarios -->
+                <div class="tab-pane fade" id="operarios" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="fw-bold text-light mb-0">Operarios Registrados</h4>
+                        <button class="btn btn-info btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalCrearOperario">Nuevo Operario</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-dark table-hover mb-0 align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Nombre Completo</th>
+                                            <th>Usuario</th>
+                                            <th>Estado</th>
+                                            <th>Telegram ID</th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabla-operarios-body">
+                                        <tr><td colspan="6" class="text-center text-muted">Cargando operarios...</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label text-light">Contraseña:</label>
-                                <input type="password" class="form-control" id="login-password" value="admin123" required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista 3: Herramientas y Desgaste -->
+                <div class="tab-pane fade" id="herramientas" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="fw-bold text-light mb-0">Control de Herramientas y Vida Útil</h4>
+                        <button class="btn btn-info btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalCrearHerramienta">Agregar Herramienta</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-dark table-hover mb-0 align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Herramienta</th>
+                                            <th>Máquina</th>
+                                            <th>Uso / Expectativa</th>
+                                            <th>Porcentaje Desgaste</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabla-herramientas-body">
+                                        <tr><td colspan="6" class="text-center text-muted">Cargando herramientas...</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
-                            <div id="login-error" class="alert alert-danger d-none py-2"></div>
-                            <button type="submit" class="btn btn-info w-100 fw-bold py-2 mt-2">Iniciar Sesión</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista 4: Control de Actividades (Fit & Retroactive Adjustments) -->
+                <div class="tab-pane fade" id="actividades" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h4 class="fw-bold text-light mb-0">Control & Ajuste Retroactivo de Actividades</h4>
+                            <small class="text-muted">Seleccione varias casillas para fusionar (Merge) o divida actividades (Split).</small>
+                        </div>
+                        <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="ejecutarMerge()">Fusionar Seleccionadas (Merge)</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-dark table-hover mb-0 align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Sel.</th>
+                                            <th>ID</th>
+                                            <th>Máquina</th>
+                                            <th>Operario</th>
+                                            <th>Herramienta</th>
+                                            <th>Inicio</th>
+                                            <th>Fin</th>
+                                            <th>Horas Activas</th>
+                                            <th>Estado</th>
+                                            <th>Comentario</th>
+                                            <th>Ajuste Retroactivo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabla-actividades-body">
+                                        <tr><td colspan="11" class="text-center text-muted">Cargando actividades...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista 5: Informes & Analítica de Planta -->
+                <div class="tab-pane fade" id="informes" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h4 class="fw-bold text-light mb-0">Informes y Analítica de Planta</h4>
+                            <small class="text-muted">Análisis gráfico de producción semanal, mensual (por máquina) y distribución por turnos.</small>
+                        </div>
+                        <div>
+                            <button class="btn btn-outline-info btn-sm me-2" onclick="loadInformes()">Actualizar Gráficos</button>
+                            <button class="btn btn-success btn-sm fw-bold" onclick="exportarCSV()">Exportar Reporte CSV</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Fila 1: Gráficos de Último Mes (Separado por Máquina) y Turnos -->
+                    <div class="row me-0 ms-0">
+                        <!-- Plot 1: Producción del Último Mes (30 Días - Subgráficos Separados por Máquina) -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header fw-bold text-info d-flex justify-content-between align-items-center">
+                                    <span>Producción del Último Mes (30 Días - Separado por Máquina)</span>
+                                    <span class="badge bg-secondary">Evolución Mensual (30d)</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="p-2 rounded bg-dark border border-secondary text-center">
+                                        <img id="img-grafico-mes" src="/api/v1/admin/informes/grafico-mes" class="img-fluid rounded" alt="Gráfico Producción Mensual por Máquina">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Plot 2: Distribución por Turnos de Trabajo -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header fw-bold text-info d-flex justify-content-between align-items-center">
+                                    <span>Distribución por Turno de Trabajo</span>
+                                    <span class="badge bg-info text-dark">Mañana / Tarde / Noche</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="p-2 rounded bg-dark border border-secondary text-center">
+                                        <img id="img-grafico-turnos-detalle" src="/api/v1/admin/informes/grafico-turnos-detalle" class="img-fluid rounded" alt="Gráfico Producción por Turno">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fila 2: Gráficos Semanales (Manteniendo los 2 gráficos de la semana anterior) -->
+                    <div class="row me-0 ms-0">
+                        <!-- Plot 3: Horas Operativas por Día y Máquina (7 Días) -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header fw-bold text-info d-flex justify-content-between align-items-center">
+                                    <span>Horas Operativas por Día y Máquina (Últimos 7 Días)</span>
+                                    <span class="badge bg-secondary">Barras Comparativas</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="p-2 rounded bg-dark border border-secondary text-center">
+                                        <img id="img-grafico-turno" src="/api/v1/admin/informes/grafico-turno" class="img-fluid rounded" alt="Gráfico Horas por Día">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Plot 4: Consolidado Semanal de Horas por Máquina -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header fw-bold text-info d-flex justify-content-between align-items-center">
+                                    <span>Consolidado Semanal de Horas por Máquina</span>
+                                    <span class="badge bg-secondary">Barras Horizontales</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="p-2 rounded bg-dark border border-secondary text-center">
+                                        <img id="img-grafico-semana" src="/api/v1/admin/informes/grafico-semana" class="img-fluid rounded" alt="Gráfico Consolidado Semanal">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tablas de Datos Resumen -->
+                    <div class="row me-0 ms-0">
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header fw-bold text-light">Detalle de Actividades por Día y Máquina</div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-dark table-hover mb-0 align-middle">
+                                            <thead>
+                                                <tr>
+                                                    <th>Fecha</th>
+                                                    <th>Máquina</th>
+                                                    <th>Sesiones</th>
+                                                    <th>Horas Activas</th>
+                                                    <th>Operarios</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tabla-reporte-turno-body">
+                                                <tr><td colspan="5" class="text-center text-muted">Cargando reporte de turnos...</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header fw-bold text-light">Resumen de Producción por Turno de Trabajo</div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-dark table-hover mb-0 align-middle">
+                                            <thead>
+                                                <tr>
+                                                    <th>Turno</th>
+                                                    <th>Sesiones</th>
+                                                    <th>Horas Activas</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tabla-reporte-turnos-detalle-body">
+                                                <tr><td colspan="3" class="text-center text-muted">Cargando desglose por turno...</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista 6: Configuración del Sistema -->
+                <div class="tab-pane fade" id="configuracion" role="tabpanel">
+                    <h4 class="fw-bold text-light mb-3">Configuración Global de Planta</h4>
+                    <div class="card p-4 col-md-8">
+                        <form onsubmit="guardarConfiguracion(event)">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Timeout de Inactividad (Minutos)</label>
+                                <input type="number" class="form-control bg-dark text-light border-secondary" id="cfg-inactividad" required>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">Turno Mañana (Inicio)</label>
+                                    <input type="time" class="form-control bg-dark text-light border-secondary" id="cfg-manana-init">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Turno Mañana (Fin)</label>
+                                    <input type="time" class="form-control bg-dark text-light border-secondary" id="cfg-manana-end">
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">Turno Tarde (Inicio)</label>
+                                    <input type="time" class="form-control bg-dark text-light border-secondary" id="cfg-tarde-init">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Turno Tarde (Fin)</label>
+                                    <input type="time" class="form-control bg-dark text-light border-secondary" id="cfg-tarde-end">
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">Turno Noche (Inicio)</label>
+                                    <input type="time" class="form-control bg-dark text-light border-secondary" id="cfg-noche-init">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Turno Noche (Fin)</label>
+                                    <input type="time" class="form-control bg-dark text-light border-secondary" id="cfg-noche-end">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-info fw-bold">Guardar Configuración</button>
                         </form>
                     </div>
                 </div>
+
             </div>
         </div>
-        {% else %}
-
-        <!-- Navigation Tabs -->
-        <ul class="nav nav-tabs mb-4" id="adminTab" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" type="button" role="tab">Dashboard Monitoreo</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="operarios-tab" data-bs-toggle="tab" data-bs-target="#operarios" type="button" role="tab">Gestión Operarios</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="herramientas-tab" data-bs-toggle="tab" data-bs-target="#herramientas" type="button" role="tab">Herramientas & Desgaste</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="actividades-tab" data-bs-toggle="tab" data-bs-target="#actividades" type="button" role="tab">Control de Actividades (Fit)</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="informes-tab" data-bs-toggle="tab" data-bs-target="#informes" type="button" role="tab">Informes & Reportes</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="configuracion-tab" data-bs-toggle="tab" data-bs-target="#configuracion" type="button" role="tab">Configuración Sistema</button>
-            </li>
-        </ul>
-
-        <!-- Tab Contents -->
-        <div class="tab-content" id="adminTabContent">
-            
-            <!-- Vista 1: Dashboard Monitoreo en Tiempo Real -->
-            <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4 class="fw-bold text-light mb-0">Estado de Planta en Tiempo Real</h4>
-                    <span class="badge bg-secondary">Actualización cada 5s</span>
-                </div>
-                <div class="row" id="cards-maquinas-container">
-                    <div class="col-12 text-center text-muted py-4">Cargando estado de máquinas...</div>
-                </div>
-            </div>
-
-            <!-- Vista 2: Gestión de Operarios -->
-            <div class="tab-pane fade" id="operarios" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4 class="fw-bold text-light mb-0">Operarios Registrados</h4>
-                    <button class="btn btn-info btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalCrearOperario">+ Crear Operario</button>
-                </div>
-                <div class="card">
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-dark table-hover mb-0 align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Nombre</th>
-                                        <th>Username</th>
-                                        <th>Estado</th>
-                                        <th>Telegram</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tabla-operarios-body">
-                                    <tr><td colspan="6" class="text-center text-muted">Cargando operarios...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Vista 3: Herramientas y Desgaste -->
-            <div class="tab-pane fade" id="herramientas" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4 class="fw-bold text-light mb-0">Gestión de Herramientas & Vida Útil</h4>
-                    <button class="btn btn-info btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalCrearHerramienta">+ Registrar Herramienta</button>
-                </div>
-                <div class="card">
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-dark table-hover mb-0 align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Herramienta</th>
-                                        <th>Máquina</th>
-                                        <th>Uso / Expectativa</th>
-                                        <th>Porcentaje Desgaste</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tabla-herramientas-body">
-                                    <tr><td colspan="5" class="text-center text-muted">Cargando herramientas...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Vista 4: Control de Actividades (Fit & Retroactive Adjustments) -->
-            <div class="tab-pane fade" id="actividades" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <h4 class="fw-bold text-light mb-0">Control & Ajuste Retroactivo de Actividades</h4>
-                        <small class="text-muted">Seleccione varias casillas para fusionar (Merge) o divida actividades (Split).</small>
-                    </div>
-                    <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="ejecutarMerge()">Fusionar Seleccionadas (Merge)</button>
-                </div>
-                <div class="card">
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-dark table-hover mb-0 align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>Sel.</th>
-                                        <th>ID</th>
-                                        <th>Máquina</th>
-                                        <th>Operario</th>
-                                        <th>Herramienta</th>
-                                        <th>Inicio</th>
-                                        <th>Fin</th>
-                                        <th>Horas Activas</th>
-                                        <th>Comentario</th>
-                                        <th>Ajuste Retroactivo</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tabla-actividades-body">
-                                    <tr><td colspan="10" class="text-center text-muted">Cargando actividades...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Vista 5: Informes & KPIs -->
-            <div class="tab-pane fade" id="informes" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4 class="fw-bold text-light mb-0">Informes y Reportes Consolidados</h4>
-                    <button class="btn btn-success btn-sm fw-bold" onclick="exportarCSV()">Exportar CSV</button>
-                </div>
-                <div class="row">
-                    <div class="col-md-6 mb-4">
-                        <div class="card h-100">
-                            <div class="card-header fw-bold text-info">Últimos Turnos (7 Días)</div>
-                            <div class="card-body">
-                                <div id="informes-turno-text" class="mb-3"></div>
-                                <div class="p-2 rounded bg-dark border border-secondary text-center">
-                                    <img id="informes-turno-img" src="/api/v1/admin/informes/grafico-turno" class="img-fluid rounded" alt="Gráfico Turnos">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6 mb-4">
-                        <div class="card h-100">
-                            <div class="card-header fw-bold text-info">Consolidado Semanal por Máquina</div>
-                            <div class="card-body">
-                                <div id="informes-semana-text" class="mb-3"></div>
-                                <div class="p-2 rounded bg-dark border border-secondary text-center">
-                                    <img id="informes-semana-img" src="/api/v1/admin/informes/grafico-semana" class="img-fluid rounded" alt="Gráfico Semanal">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Vista 6: Configuración del Sistema -->
-            <div class="tab-pane fade" id="configuracion" role="tabpanel">
-                <h4 class="fw-bold text-light mb-3">Configuración Global de Planta</h4>
-                <div class="card col-md-8">
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label text-light">Tiempo límite de inactividad (Tinactividad) en minutos:</label>
-                            <input type="number" class="form-control" id="cfg-timeout" value="10">
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label text-light">Inicio Turno Mañana:</label>
-                                <input type="text" class="form-control" id="cfg-manana" value="07:00">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label text-light">Fin Turno Mañana:</label>
-                                <input type="text" class="form-control" id="cfg-fin-manana" value="12:00">
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label text-light">Inicio Turno Tarde:</label>
-                                <input type="text" class="form-control" id="cfg-tarde" value="14:00">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label text-light">Fin Turno Tarde:</label>
-                                <input type="text" class="form-control" id="cfg-fin-tarde" value="17:00">
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label text-light">Inicio Turno Noche:</label>
-                                <input type="text" class="form-control" id="cfg-noche" value="22:00">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label text-light">Fin Turno Noche:</label>
-                                <input type="text" class="form-control" id="cfg-fin-noche" value="06:00">
-                            </div>
-                        </div>
-                        <button class="btn btn-info fw-bold mt-2" onclick="guardarConfiguracion()">Guardar Configuración</button>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-        {% endif %}
     </div>
 
     <!-- Modales -->
-    
-    <!-- Modal Stats Operario (Matplotlib Line Chart) -->
-    <div class="modal fade" id="modalStatsOperario" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="stats-op-title">Estadísticas de Rendimiento</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body text-center">
-                    <div id="stats-op-info" class="text-start mb-3"></div>
-                    <div class="p-2 rounded bg-dark border border-secondary">
-                        <img id="stats-op-chart" src="" alt="Gráfico de Rendimiento por Línea" class="img-fluid rounded">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Modal Crear Operario -->
     <div class="modal fade" id="modalCrearOperario" tabindex="-1">
         <div class="modal-dialog">
-            <div class="modal-content">
+            <div class="modal-content bg-dark text-light border-secondary">
                 <div class="modal-header">
-                    <h5 class="modal-title">Nuevo Operario</h5>
+                    <h5 class="modal-title fw-bold">Registrar Nuevo Operario</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <form id="formCrearOperario">
                         <div class="mb-3">
-                            <label class="form-label">Nombre Completo:</label>
-                            <input type="text" class="form-control" id="op-nombre" required>
+                            <label class="form-label">Nombre Completo</label>
+                            <input type="text" class="form-control bg-dark text-light border-secondary" id="op-nombre" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Nombre de Usuario (Username):</label>
-                            <input type="text" class="form-control" id="op-username" required>
+                            <label class="form-label">Nombre de Usuario (sin espacios)</label>
+                            <input type="text" class="form-control bg-dark text-light border-secondary" id="op-username" required>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-info" onclick="guardarNuevoOperario()">Guardar Operario</button>
+                    <button type="button" class="btn btn-info fw-bold" onclick="guardarNuevoOperario()">Guardar Operario</button>
                 </div>
             </div>
         </div>
@@ -317,30 +387,48 @@
     <!-- Modal Crear Herramienta -->
     <div class="modal fade" id="modalCrearHerramienta" tabindex="-1">
         <div class="modal-dialog">
-            <div class="modal-content">
+            <div class="modal-content bg-dark text-light border-secondary">
                 <div class="modal-header">
-                    <h5 class="modal-title">Registrar Nueva Herramienta</h5>
+                    <h5 class="modal-title fw-bold">Agregar Herramienta de Corte</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <form id="formCrearHerramienta">
                         <div class="mb-3">
-                            <label class="form-label">Máquina:</label>
-                            <select class="form-select" id="h-maquina-id"></select>
+                            <label class="form-label">Máquina Asignada</label>
+                            <select class="form-select bg-dark text-light border-secondary" id="h-maquina-id">
+                                <option value="1">Torno 1</option>
+                                <option value="2">Fresadora 1</option>
+                            </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Nombre de Herramienta:</label>
-                            <input type="text" class="form-control" id="h-nombre" required>
+                            <label class="form-label">Nombre / Descripción de la Herramienta</label>
+                            <input type="text" class="form-control bg-dark text-light border-secondary" id="h-nombre" placeholder="ej: Inserto WNMG 080408" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Horas de Expectativa de Vida Útil:</label>
-                            <input type="number" step="0.5" class="form-control" id="h-expectativa" value="60" required>
+                            <label class="form-label">Expectativa de Vida Útil (Horas)</label>
+                            <input type="number" step="0.5" class="form-control bg-dark text-light border-secondary" id="h-horas" placeholder="ej: 60.0" required>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-info" onclick="guardarNuevaHerramienta()">Registrar Herramienta</button>
+                    <button type="button" class="btn btn-info fw-bold" onclick="guardarNuevaHerramienta()">Guardar Herramienta</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Stats Operario -->
+    <div class="modal fade" id="modalOperarioStats" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark text-light border-secondary">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="modalStatsLabel">Estadísticas de Operario</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="img-operario-stats" src="" class="img-fluid rounded" alt="Gráfico Operario">
                 </div>
             </div>
         </div>
@@ -349,30 +437,55 @@
     <!-- Modal Split Actividad -->
     <div class="modal fade" id="modalSplitActividad" tabindex="-1">
         <div class="modal-dialog">
-            <div class="modal-content">
+            <div class="modal-content bg-dark text-light border-secondary">
                 <div class="modal-header">
-                    <h5 class="modal-title">Dividir Actividad (Split)</h5>
+                    <h5 class="modal-title fw-bold">Dividir Actividad (Split)</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="hidden" id="split-act-id">
+                    <input type="hidden" id="split-actividad-id">
                     <div class="mb-3">
-                        <label class="form-label">Fecha / Hora de Corte (YYYY-MM-DD HH:MM:SS):</label>
-                        <input type="text" class="form-control" id="split-corte" required>
+                        <label class="form-label">Fecha y Hora de Corte (YYYY-MM-DD HH:MM:SS)</label>
+                        <input type="text" class="form-control bg-dark text-light border-secondary" id="split-fecha-corte" placeholder="2026-08-01 14:30:00">
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-warning text-dark fw-bold" onclick="ejecutarSplit()">Dividir Actividad</button>
+                    <button type="button" class="btn btn-warning fw-bold text-dark" onclick="ejecutarSplit()">Ejecutar Split</button>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Modal Reasignar Operario -->
+    <div class="modal fade" id="modalReasignarOperario" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-light border-secondary">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Reasignar Operario Retroactivamente</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="reasignar-actividad-id">
+                    <div class="mb-3">
+                        <label class="form-label">Seleccionar Operario Responsable</label>
+                        <select class="form-select bg-dark text-light border-secondary" id="select-operario-reasignar">
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-info fw-bold" onclick="ejecutarReasignacion()">Guardar Reasignación</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% endif %}
+
     <!-- Bootstrap 5 Bundle JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Custom JS Modules -->
-    <script src="/static/js/api_client.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SPA Custom Controller JS -->
     <script src="/static/js/dashboard.js"></script>
 </body>
 </html>

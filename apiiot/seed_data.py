@@ -22,9 +22,11 @@ async def seed_database():
     )
 
     async with conn.cursor() as cur:
-        print("Cleaning tables actividades and registro_actividad...")
+        print("Cleaning tables: actividades, registro_actividad, asignaciones_actuales, herramientas...")
         await cur.execute("DELETE FROM actividades")
         await cur.execute("DELETE FROM registro_actividad")
+        await cur.execute("DELETE FROM asignaciones_actuales")
+        await cur.execute("DELETE FROM herramientas")
 
         # 1. Ensure Usuarios
         await cur.execute("SELECT id, username FROM usuarios")
@@ -70,26 +72,38 @@ async def seed_database():
 
         maquinas = [torno_id, fresa_id]
 
-        # 3. Ensure Herramientas
-        await cur.execute("SELECT id, nombre, maquina_id FROM herramientas")
-        rows = await cur.fetchall()
+        # 3. Re-create new tools
         tools_by_maq = {torno_id: [], fresa_id: []}
-        for r in rows:
-            tools_by_maq.setdefault(r[2], []).append(r[0])
 
-        if not tools_by_maq[torno_id]:
-            await cur.execute("INSERT INTO herramientas (maquina_id, nombre, horas_expectativa, horas_uso) VALUES (%s, 'Cuchilla WNMG 080408', 60.0, 0.0)", (torno_id,))
-            t1 = cur.lastrowid
-            await cur.execute("INSERT INTO herramientas (maquina_id, nombre, horas_expectativa, horas_uso) VALUES (%s, 'Inserto Tronzador 3mm', 30.0, 0.0)", (torno_id,))
-            t2 = cur.lastrowid
-            tools_by_maq[torno_id] = [t1, t2]
+        # Torno Tools
+        torno_tools_def = [
+            ('Torno_1 / Inserto de desbaste general / CNMG 120408', 60.0),
+            ('Torno_1 / Inserto de desbaste general / WNMG 080408', 60.0),
+            ('Torno_1 / Inserto de acabado y perfilado / DCMT 11T304', 50.0),
+            ('Torno_1 / Inserto de acabado y perfilado / VBMT 160404', 50.0),
+            ('Torno_1 / Inserto de tronzado y ranurado / MGMN 200', 30.0),
+            ('Torno_1 / Inserto de tronzado y ranurado / MGMN 300', 30.0)
+        ]
+        for name, expect in torno_tools_def:
+            await cur.execute("INSERT INTO herramientas (maquina_id, nombre, horas_expectativa, horas_uso) VALUES (%s, %s, %s, 0.0)", (torno_id, name, expect))
+            tools_by_maq[torno_id].append(cur.lastrowid)
 
-        if not tools_by_maq[fresa_id]:
-            await cur.execute("INSERT INTO herramientas (maquina_id, nombre, horas_expectativa, horas_uso) VALUES (%s, 'Fresa Frontal Ø20mm', 50.0, 0.0)", (fresa_id,))
-            f1 = cur.lastrowid
-            await cur.execute("INSERT INTO herramientas (maquina_id, nombre, horas_expectativa, horas_uso) VALUES (%s, 'Fresa Planear Ø50mm', 40.0, 0.0)", (fresa_id,))
-            f2 = cur.lastrowid
-            tools_by_maq[fresa_id] = [f1, f2]
+        # Fresadora Tools
+        fresa_tools_def = [
+            ('Fresadora_1 / Mecha helicoidal estándar / DIN 338', 40.0),
+            ('Fresadora_1 / Mecha helicoidal estándar / DIN 1897', 40.0),
+            ('Fresadora_1 / Mecha de centrar / DIN 333-A', 50.0),
+            ('Fresadora_1 / Mecha de centrar / DIN 333-R', 50.0),
+            ('Fresadora_1 / Mecha de puntear (NC Drill) / DIN 1836', 60.0),
+            ('Fresadora_1 / Mecha de puntear (NC Drill) / DIN 6539', 60.0)
+        ]
+        for name, expect in fresa_tools_def:
+            await cur.execute("INSERT INTO herramientas (maquina_id, nombre, horas_expectativa, horas_uso) VALUES (%s, %s, %s, 0.0)", (fresa_id, name, expect))
+            tools_by_maq[fresa_id].append(cur.lastrowid)
+
+        # Ensure asignaciones_actuales has tools
+        await cur.execute("INSERT INTO asignaciones_actuales (maquina_id, operario_id, herramienta_id, comentario) VALUES (%s, %s, %s, 'Operación normal')", (torno_id, juan_id, tools_by_maq[torno_id][1]))
+        await cur.execute("INSERT INTO asignaciones_actuales (maquina_id, operario_id, herramienta_id, comentario) VALUES (%s, %s, %s, 'Operación normal')", (fresa_id, carlos_id, tools_by_maq[fresa_id][0]))
 
         # 4. Generate Realistic Past Month Data (30 days ago to today)
         end_date = datetime.now()
@@ -140,7 +154,6 @@ async def seed_database():
                     continue
             else:
                 # Monday to Friday (0..4): Regular shifts
-                # 85% chance operator 1 works, 85% chance operator 2 works
                 op_working = []
                 if random.random() < 0.88: op_working.append(juan_id)
                 if random.random() < 0.88: op_working.append(carlos_id)
@@ -206,7 +219,6 @@ async def seed_database():
                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
                         (maq, op, tool, act_start, act_end, active_sec, estado, comentario)
                     )
-                    act_id = cur.lastrowid
                     total_actividades += 1
 
                     # Insert telemetry events in registro_actividad

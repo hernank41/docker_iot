@@ -41,7 +41,7 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await login_step_text_handler(update, context)
     elif context.user_data.get("esperando_accion"):
         await admin_text_input_handler(update, context)
-    elif context.user_data.get("esperando_comentario_actividad_id"):
+    elif context.user_data.get("esperando_comentario") or context.user_data.get("esperando_comentario_actividad_id") or context.user_data.get("esperando_comentario_maquina_id") or context.user_data.get("esperando_finalizar_actividad_id"):
         await recibir_comentario_handler(update, context)
 
 def main():
@@ -58,11 +58,11 @@ def main():
     # Handlers de Selección de Rol e Inicio de Sesión
     app.add_handler(CallbackQueryHandler(role_callback_handler, pattern="^(role_|login_op_|show_)"))
 
+    # Handlers de Menú de Operario
+    app.add_handler(CallbackQueryHandler(operario_callback_handler, pattern="^(op_|asig_|select_|instalar_|menu_operario)"))
+
     # Handlers de Menú de Administración
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(admin_|menu_|reporte_|edit_cfg_|logout_session)"))
-
-    # Handlers de Menú de Operario
-    app.add_handler(CallbackQueryHandler(operario_callback_handler, pattern="^(op_|asig_|select_|instalar_)"))
 
     # Router de Entrada de Texto Interactivo
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))

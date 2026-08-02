@@ -4,7 +4,9 @@ from services.api_client import api_client
 from services.chart_generator import (
     generar_grafico_turno,
     generar_grafico_semana,
-    generar_grafico_operario
+    generar_grafico_operario,
+    generar_grafico_mes,
+    generar_grafico_turnos_detalle
 )
 from keyboards.inline import (
     get_admin_menu_keyboard,
@@ -15,8 +17,8 @@ from keyboards.inline import (
     get_cancel_keyboard
 )
 
-async def safe_edit_or_reply(query, text: str, reply_markup=None, parse_mode="Markdown"):
-    """Edita el mensaje si es posible. Si es una foto o falla el edit_text, borra el mensaje anterior y envía uno nuevo."""
+async def safe_edit_or_reply(query, text: str, reply_markup=None, parse_mode=None):
+    """Edita el mensaje si es posible. Realiza un fallback a texto plano limpio."""
     try:
         if query.message and (query.message.photo or not query.message.text):
             try:
@@ -47,7 +49,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data.clear()
         await safe_edit_or_reply(
             query,
-            "**Sesión cerrada correctamente.**\n\nPara volver a iniciar sesión ejecute `/start` o `/login`."
+            "Sesión cerrada correctamente.\n\nPara volver a iniciar sesión ejecute /start o /login."
         )
         return
 
@@ -55,7 +57,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data.pop("esperando_accion", None)
         await safe_edit_or_reply(
             query,
-            "**Menú de Administración Principal:**",
+            "Menú de Administración Principal:",
             reply_markup=get_admin_menu_keyboard()
         )
 
@@ -66,15 +68,15 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             await safe_edit_or_reply(query, "No hay información de máquinas registrada.", reply_markup=get_admin_menu_keyboard())
             return
 
-        text = "**ESTADO EN TIEMPO REAL DE MÁQUINAS**\n\n"
+        text = "ESTADO EN TIEMPO REAL DE MÁQUINAS\n\n"
         for m in estados:
             estado_str = m.get("estado", "PARADA")
             operario = m.get("operario_nombre") or "Sin Asignar"
             herramienta = m.get("herramienta_nombre") or "Sin Asignar"
             causa = m.get("causa") or "OPERACION_NORMAL"
             
-            text += f"• **{m['maquina']}** ({m['tipo']})\n"
-            text += f"  Estado: `{estado_str}` [{causa}]\n"
+            text += f"• {m['maquina']} ({m['tipo']})\n"
+            text += f"  Estado: {estado_str} [{causa}]\n"
             text += f"  Operario: {operario}\n"
             text += f"  Herramienta: {herramienta}\n\n"
 
@@ -87,15 +89,21 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             await safe_edit_or_reply(query, "No hay herramientas registradas.", reply_markup=get_admin_menu_keyboard())
             return
 
-        text = "**ESTADO DE HERRAMIENTAS Y VIDA ÚTIL**\n\n"
+        text = "ESTADO DE HERRAMIENTAS Y VIDA ÚTIL\n\n"
         for h in herramientas:
             porcentaje = float(h.get("porcentaje_desgaste") or 0.0)
             barra = generar_barra_progreso(porcentaje)
             alerta = " [DESGASTE ALTO]" if porcentaje >= 90 else ""
             
-            text += f"• **{h['nombre']}** ({h['maquina_nombre']})\n"
-            text += f"  Desgaste: `{barra}`{alerta}\n"
-            text += f"  Uso: `{h['horas_uso']} hs` / Expectativa: `{h['horas_expectativa']} hs`\n\n"
+            nombre_limpio = h['nombre']
+            if f"({h['maquina_nombre']})" in nombre_limpio:
+                maq_label = ""
+            else:
+                maq_label = f" ({h['maquina_nombre']})"
+            
+            text += f"• {nombre_limpio}{maq_label}\n"
+            text += f"  Desgaste: {barra}{alerta}\n"
+            text += f"  Uso: {h['horas_uso']} hs / Expectativa: {h['horas_expectativa']} hs\n\n"
 
         await safe_edit_or_reply(query, text, reply_markup=get_admin_menu_keyboard())
 
@@ -104,15 +112,15 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         usuarios = await api_client.get_usuarios()
         operarios = [u for u in usuarios if u["rol"] == "OPERARIO" and u["activo"]]
         
-        text = "**GESTIÓN DE OPERARIOS REGISTRADOS**\n\n"
+        text = "GESTIÓN DE OPERARIOS REGISTRADOS\n\n"
         if operarios:
             for op in operarios:
                 vinc = "Vinculado" if op.get("telegram_id") else "Pendiente"
-                text += f"• **{op['nombre']}** (`@{op['username']}`) - ID: `{op['id']}` [{vinc}]\n"
+                text += f"• {op['nombre']} (@{op['username']}) - ID: {op['id']} [{vinc}]\n"
         else:
             text += "No hay operarios registrados actualmente.\n"
 
-        text += "\n*Seleccione una acción con los botones inferiores:*"
+        text += "\nSeleccione una acción con los botones inferiores:"
         await safe_edit_or_reply(query, text, reply_markup=get_operarios_menu_keyboard())
 
     # 3.1 Submenú Eliminar Operario
@@ -125,7 +133,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
         await safe_edit_or_reply(
             query,
-            "**SELECCIONE EL OPERARIO A ELIMINAR/DESACTIVAR:**",
+            "SELECCIONE EL OPERARIO A ELIMINAR / DESACTIVAR:",
             reply_markup=get_operarios_list_keyboard(operarios, "admin_op_del")
         )
 
@@ -134,7 +142,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         op_id = int(data.split("_")[-1])
         res = await api_client.eliminar_usuario(op_id)
         if res and res.get("status") == "ok":
-            await safe_edit_or_reply(query, f"Operario ID `{op_id}` eliminado exitosamente.", reply_markup=get_operarios_menu_keyboard())
+            await safe_edit_or_reply(query, f"Operario ID {op_id} eliminado exitosamente.", reply_markup=get_operarios_menu_keyboard())
         else:
             await safe_edit_or_reply(query, "No se pudo eliminar el operario.", reply_markup=get_operarios_menu_keyboard())
 
@@ -148,7 +156,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
         await safe_edit_or_reply(
             query,
-            "**SELECCIONE UN OPERARIO PARA VER SUS ESTADÍSTICAS:**",
+            "SELECCIONE UN OPERARIO PARA VER SUS ESTADÍSTICAS:",
             reply_markup=get_operarios_list_keyboard(operarios, "admin_opstats")
         )
 
@@ -164,14 +172,14 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         resumen = stats.get("resumen", {})
         maquinas_stats = stats.get("maquinas", [])
 
-        text = f"**ESTADÍSTICAS DE RENDIMIENTO: {user_info.get('nombre')}**\n"
-        text += f"• **Usuario:** `@{user_info.get('username')}`\n"
-        text += f"• **Total Actividades Completadas:** `{resumen.get('total_actividades', 0)}`\n"
-        text += f"• **Horas Operativas Totales:** `{resumen.get('total_horas', 0.0)} hs`\n\n"
+        text = f"ESTADÍSTICAS DE RENDIMIENTO: {user_info.get('nombre')}\n"
+        text += f"• Usuario: @{user_info.get('username')}\n"
+        text += f"• Total Actividades Completadas: {resumen.get('total_actividades', 0)}\n"
+        text += f"• Horas Operativas Totales: {resumen.get('total_horas', 0.0)} hs\n\n"
 
-        text += "**Desglose por Máquina:**\n"
+        text += "Desglose por Máquina:\n"
         for m in maquinas_stats:
-            text += f"   • `{m['maquina']}`: {m['horas_activas']} hs ({m['actividades_count']} sesiones)\n"
+            text += f"   • {m['maquina']}: {m['horas_activas']} hs ({m['actividades_count']} sesiones)\n"
 
         chart_buf = generar_grafico_operario(user_info.get('nombre', 'Operario'), maquinas_stats)
         if chart_buf:
@@ -183,7 +191,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             await query.message.reply_photo(
                 photo=InputFile(chart_buf, filename="operario_stats.png"),
                 caption=caption_text,
-                parse_mode="Markdown",
                 reply_markup=get_operarios_menu_keyboard()
             )
         else:
@@ -194,8 +201,8 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data["esperando_accion"] = "crear_op_nombre"
         await safe_edit_or_reply(
             query,
-            "**NUEVO OPERARIO (Paso 1 de 2)**\n\n"
-            "Por favor, envíe en un **mensaje de texto** el **Nombre Completo** del operario (ejemplo: *María López*):",
+            "NUEVO OPERARIO (Paso 1 de 2)\n\n"
+            "Por favor, envíe en un mensaje de texto el Nombre Completo del operario (ejemplo: María López):",
             reply_markup=get_cancel_keyboard("admin_operarios_menu")
         )
 
@@ -203,7 +210,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     elif data == "admin_informes":
         await safe_edit_or_reply(
             query,
-            "**INFORMES Y ANALÍTICA DE PRODUCCIÓN**\nSeleccione el informe que desea consultar:",
+            "INFORMES Y ANALÍTICA DE PRODUCCIÓN\nSeleccione el informe que desea consultar:",
             reply_markup=get_informes_keyboard()
         )
 
@@ -213,10 +220,10 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             await safe_edit_or_reply(query, "No hay registros de actividades en los últimos 7 días.", reply_markup=get_informes_keyboard())
             return
 
-        text = "**INFORME DE ACTIVIDADES POR DÍA Y TURNO (Últimos 7 Días)**\n\n"
-        for r in rep[:10]: # Limitar a las 10 entradas más recientes para brevedad
-            text += f"• **Fecha:** `{r['fecha']}` | **Máquina:** `{r['maquina']}`\n"
-            text += f"   • **Horas Activas:** `{r['horas_activas']} hs` | **Sesiones:** `{r['total_actividades']}`\n\n"
+        text = "INFORME DE ACTIVIDADES POR DÍA (Últimos 7 Días)\n\n"
+        for r in rep[:10]:
+            text += f"• Fecha: {r['fecha']} | Máquina: {r['maquina']}\n"
+            text += f"   • Horas Activas: {r['horas_activas']} hs | Sesiones: {r['total_actividades']}\n\n"
 
         chart_buf = generar_grafico_turno(rep)
         if chart_buf:
@@ -224,16 +231,13 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.message.delete()
             except Exception:
                 pass
-            
-            caption_text = "**INFORME DE ACTIVIDADES POR DÍA Y TURNO (Últimos 7 Días)**\n\nGráfico comparativo de horas operativas generado."
+            caption_text = "INFORME DE ACTIVIDADES POR DÍA (Últimos 7 Días)\n\nGráfico comparativo generado."
             await query.message.reply_photo(
                 photo=InputFile(chart_buf, filename="reporte_turno.png"),
                 caption=caption_text,
-                parse_mode="Markdown",
                 reply_markup=get_informes_keyboard()
             )
-            # Enviar el detalle extenso como texto por separado si es necesario
-            await query.message.reply_text(text, parse_mode="Markdown")
+            await query.message.reply_text(text)
         else:
             await safe_edit_or_reply(query, text, reply_markup=get_informes_keyboard())
 
@@ -243,12 +247,12 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             await safe_edit_or_reply(query, "No hay registros de producción en la semana.", reply_markup=get_informes_keyboard())
             return
 
-        text = "**INFORME CONSOLIDADO SEMANAL**\n\n"
+        text = "INFORME CONSOLIDADO SEMANAL\n\n"
         for r in rep:
-            text += f"• **Máquina:** `{r['maquina']}`\n"
-            text += f"   • **Total Horas Operativas:** `{r['total_horas_activas']} hs`\n"
-            text += f"   • **Sesiones de Actividad:** `{r['total_actividades']}`\n"
-            text += f"   • **Operarios Involucrados:** `{r['total_operarios_participantes']}`\n\n"
+            text += f"• Máquina: {r['maquina']}\n"
+            text += f"   • Total Horas Operativas: {r['total_horas_activas']} hs\n"
+            text += f"   • Sesiones de Actividad: {r['total_actividades']}\n"
+            text += f"   • Operarios Involucrados: {r['total_operarios_participantes']}\n\n"
 
         chart_buf = generar_grafico_semana(rep)
         if chart_buf:
@@ -256,14 +260,70 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.message.delete()
             except Exception:
                 pass
-            caption_text = "**INFORME CONSOLIDADO SEMANAL**\n\nGráfico donut de utilización generado."
+            caption_text = "INFORME CONSOLIDADO SEMANAL\n\nGráfico horizontal de horas por máquina generado."
             await query.message.reply_photo(
                 photo=InputFile(chart_buf, filename="reporte_semana.png"),
                 caption=caption_text,
-                parse_mode="Markdown",
                 reply_markup=get_informes_keyboard()
             )
-            await query.message.reply_text(text, parse_mode="Markdown")
+            await query.message.reply_text(text)
+        else:
+            await safe_edit_or_reply(query, text, reply_markup=get_informes_keyboard())
+
+    elif data == "reporte_mes":
+        rep_turno = await api_client.get_reporte_turno()
+        rep_mes_res = await api_client.get_reporte_mes()
+        if not rep_turno:
+            await safe_edit_or_reply(query, "No hay registros de producción en los últimos 30 días.", reply_markup=get_informes_keyboard())
+            return
+
+        resumen = rep_mes_res.get("resumen", {})
+        text = "INFORME DE PRODUCCIÓN DEL ÚLTIMO MES (30 Días)\n\n"
+        text += f"• Horas Activas Totales: {resumen.get('total_horas_mes', 0.0)} hs\n"
+        text += f"• Actividades Completadas: {resumen.get('total_actividades', 0)}\n"
+        text += f"• Operario Líder: {rep_mes_res.get('top_operario', 'N/A')} ({rep_mes_res.get('top_operario_horas', 0)} hs)\n"
+        text += f"• Máquina Más Utilizada: {rep_mes_res.get('top_maquina', 'N/A')} ({rep_mes_res.get('top_maquina_horas', 0)} hs)\n\n"
+
+        chart_buf = generar_grafico_mes(rep_turno)
+        if chart_buf:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            caption_text = "INFORME MES (30 Días)\n\nGráfico de producción diaria separado por máquina generado."
+            await query.message.reply_photo(
+                photo=InputFile(chart_buf, filename="reporte_mes.png"),
+                caption=caption_text,
+                reply_markup=get_informes_keyboard()
+            )
+            await query.message.reply_text(text)
+        else:
+            await safe_edit_or_reply(query, text, reply_markup=get_informes_keyboard())
+
+    elif data == "reporte_turnos_detalle":
+        turnos = await api_client.get_reporte_turnos_detalle()
+        if not turnos:
+            await safe_edit_or_reply(query, "No hay registros por turno en los últimos 30 días.", reply_markup=get_informes_keyboard())
+            return
+
+        text = "INFORME DE PRODUCCIÓN POR TURNO DE TRABAJO\n\n"
+        for t in turnos:
+            text += f"• {t['turno']}:\n"
+            text += f"   • Horas Activas: {t['horas_activas']} hs | Sesiones: {t['actividades_count']}\n\n"
+
+        chart_buf = generar_grafico_turnos_detalle(turnos)
+        if chart_buf:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            caption_text = "DESGLOSE POR TURNO DE TRABAJO\n\nGráfico de distribución por turno generado."
+            await query.message.reply_photo(
+                photo=InputFile(chart_buf, filename="reporte_turnos.png"),
+                caption=caption_text,
+                reply_markup=get_informes_keyboard()
+            )
+            await query.message.reply_text(text)
         else:
             await safe_edit_or_reply(query, text, reply_markup=get_informes_keyboard())
 
@@ -275,10 +335,10 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         items = [{"clave": k, "valor": v} for k, v in cfg.items()]
-        text = "**CONFIGURACIÓN GLOBAL DEL SISTEMA**\n\n"
+        text = "CONFIGURACIÓN GLOBAL DEL SISTEMA\n\n"
         for k, v in cfg.items():
-            text += f"• `{k}`: `{v}`\n"
-        text += "\n*Seleccione un parámetro para modificar su valor:*"
+            text += f"• {k}: {v}\n"
+        text += "\nSeleccione un parámetro para modificar su valor:"
 
         await safe_edit_or_reply(query, text, reply_markup=get_config_menu_keyboard(items))
 
@@ -287,9 +347,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data["esperando_accion"] = f"cfg_val_{clave}"
         await safe_edit_or_reply(
             query,
-            f"**MODIFICAR PARÁMETRO DE CONFIGURACIÓN**\n\n"
-            f"Parámetro: `{clave}`\n"
-            f"Por favor, envíe el **nuevo valor** en un mensaje de texto:",
+            f"MODIFICAR PARÁMETRO DE CONFIGURACIÓN\n\n"
+            f"Parámetro: {clave}\n"
+            f"Por favor, envíe el nuevo valor en un mensaje de texto:",
             reply_markup=get_cancel_keyboard("admin_config_menu")
         )
 
@@ -305,10 +365,9 @@ async def admin_text_input_handler(update: Update, context: ContextTypes.DEFAULT
         context.user_data["temp_op_nombre"] = text
         context.user_data["esperando_accion"] = "crear_op_username"
         await update.message.reply_text(
-            f"**NUEVO OPERARIO (Paso 2 de 2)**\n\n"
-            f"Nombre: *{text}*\n"
-            f"Ahora envíe el **Nombre de Usuario** (sin espacios, ej: *mlopez*):",
-            parse_mode="Markdown",
+            f"NUEVO OPERARIO (Paso 2 de 2)\n\n"
+            f"Nombre: {text}\n"
+            f"Ahora envíe el Nombre de Usuario (sin espacios, ej: mlopez):",
             reply_markup=get_cancel_keyboard("admin_operarios_menu")
         )
 
@@ -321,10 +380,9 @@ async def admin_text_input_handler(update: Update, context: ContextTypes.DEFAULT
         res = await api_client.crear_usuario(nombre=nombre, username=username, rol="OPERARIO")
         if res and res.get("status") == "ok":
             await update.message.reply_text(
-                f"**Operario Creado Exitosamente:**\n"
-                f"• **Nombre:** {nombre}\n"
-                f"• **Usuario:** `@{username}`",
-                parse_mode="Markdown",
+                f"Operario Creado Exitosamente:\n"
+                f"• Nombre: {nombre}\n"
+                f"• Usuario: @{username}",
                 reply_markup=get_operarios_menu_keyboard()
             )
         else:
@@ -337,8 +395,7 @@ async def admin_text_input_handler(update: Update, context: ContextTypes.DEFAULT
         res = await api_client.actualizar_configuracion(clave, text)
         if res and res.get("status") == "ok":
             await update.message.reply_text(
-                f"**Parámetro Actualizado Exitosamente:**\n`{clave}` = `{text}`",
-                parse_mode="Markdown",
+                f"Parámetro Actualizado Exitosamente:\n{clave} = {text}",
                 reply_markup=get_admin_menu_keyboard()
             )
         else:

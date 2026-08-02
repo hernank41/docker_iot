@@ -44,19 +44,20 @@ async def guardar_evento(topic: str, payload_raw: bytes):
 
         maquina_nombre = data.get("maquina")
         if maquina_nombre:
-            low = maquina_nombre.lower()
-            if "pinacho" in low or low in ["torno", "torno1", "torno_1"]:
+            low = maquina_nombre.lower().replace("z", "s")
+            if "pinacho" in low or "torno" in low:
                 maquina_nombre = "Torno_1"
-            elif "universal" in low or low in ["fresadora", "fresadora1", "fresadora_1"]:
+            elif "universal" in low or "fres" in low:
                 maquina_nombre = "Fresadora_1"
 
         if not maquina_nombre:
             parts = topic.split('/')
             if len(parts) >= 2:
                 sub = parts[-2].lower() if len(parts) >= 3 else parts[-1].lower()
-                if "torno" in sub:
+                sub_norm = sub.replace("z", "s")
+                if "torno" in sub_norm:
                     maquina_nombre = "Torno_1"
-                elif "fresadora" in sub:
+                elif "fres" in sub_norm:
                     maquina_nombre = "Fresadora_1"
 
         if not maquina_nombre:
@@ -73,7 +74,6 @@ async def guardar_evento(topic: str, payload_raw: bytes):
 
         conn = await get_db_connection()
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            # 1. Obtener ID de la Máquina
             await cur.execute("SELECT id FROM maquinas WHERE nombre = %s", (maquina_nombre,))
             res = await cur.fetchone()
             
@@ -85,26 +85,23 @@ async def guardar_evento(topic: str, payload_raw: bytes):
             
             maquina_id = res['id']
 
-            # 2. Insertar en registro de actividad
             sql = """
                 INSERT INTO registro_actividad (maquina_id, estado, codigo_estado, causa)
                 VALUES (%s, %s, %s, %s)
             """
             await cur.execute(sql, (maquina_id, estado, codigo_estado, causa))
-            logging.info(f"✅ Evento telemetría: '{maquina_nombre}' (ID {maquina_id}) -> {estado} [{causa}]")
+            logging.info(f"Event telemetria: '{maquina_nombre}' (ID {maquina_id}) -> {estado} [{causa}]")
 
-            # 3. Lógica del Motor de Actividades (Sesión de Actividad)
             await cur.execute("SELECT valor FROM configuracion_sistema WHERE clave = 'timeout_inactividad_minutos'")
             conf_res = await cur.fetchone()
             timeout_minutos = int(conf_res['valor']) if conf_res else 10
 
-            # Obtener asignación actual de la máquina (operario y herramienta)
-            await cur.execute("SELECT operario_id, herramienta_id FROM asignaciones_actuales WHERE maquina_id = %s", (maquina_id,))
+            await cur.execute("SELECT operario_id, herramienta_id, comentario FROM asignaciones_actuales WHERE maquina_id = %s", (maquina_id,))
             asig = await cur.fetchone()
             operario_id = asig['operario_id'] if asig else None
             herramienta_id = asig['herramienta_id'] if asig else None
+            comentario_pre = asig.get('comentario') if asig else None
 
-            # Buscar actividad activa actual
             await cur.execute(
                 "SELECT id, fecha_inicio, timestampdiff(MINUTE, fecha_inicio, CURRENT_TIMESTAMP) as transcurrido_min FROM actividades WHERE maquina_id = %s AND estado = 'EN_CURSO' ORDER BY id DESC LIMIT 1",
                 (maquina_id,)
@@ -113,14 +110,13 @@ async def guardar_evento(topic: str, payload_raw: bytes):
 
             if estado == "ACTIVA":
                 if not act_activa:
-                    # Iniciar nueva actividad
+                    comment_to_use = comentario_pre or causa or "Operación normal"
                     await cur.execute("""
-                        INSERT INTO actividades (maquina_id, operario_id, herramienta_id, estado)
-                        VALUES (%s, %s, %s, 'EN_CURSO')
-                    """, (maquina_id, operario_id, herramienta_id))
-                    logging.info(f"🚀 Nueva sesión de actividad iniciada para {maquina_nombre}")
+                        INSERT INTO actividades (maquina_id, operario_id, herramienta_id, estado, comentario)
+                        VALUES (%s, %s, %s, 'EN_CURSO', %s)
+                    """, (maquina_id, operario_id, herramienta_id, comment_to_use))
+                    logging.info(f"Nueva sesión de actividad iniciada para {maquina_nombre}")
                 else:
-                    # Acumular horas de uso en herramienta si existe
                     if herramienta_id:
                         await cur.execute("""
                             UPDATE herramientas 
@@ -135,7 +131,12 @@ async def guardar_evento(topic: str, payload_raw: bytes):
                         SET estado = 'FINALIZADA', fecha_fin = CURRENT_TIMESTAMP, comentario = 'Cierre automatico por inactividad'
                         WHERE id = %s
                     """, (act_activa['id'],))
-                    logging.info(f"⏳ Actividad {act_activa['id']} para {maquina_nombre} cerrada por timeout de inactividad.")
+                    await cur.execute("""
+                        UPDATE asignaciones_actuales 
+                        SET operario_id = NULL, herramienta_id = NULL, comentario = NULL 
+                        WHERE maquina_id = %s
+                    """, (maquina_id,))
+                    logging.info(f"Actividad {act_activa['id']} para {maquina_nombre} cerrada por timeout de inactividad.")
 
             elif estado == "PARADA_EMERGENCIA":
                 if act_activa:
@@ -144,13 +145,17 @@ async def guardar_evento(topic: str, payload_raw: bytes):
                         SET estado = 'PARADA_EMERGENCIA', fecha_fin = CURRENT_TIMESTAMP, comentario = 'Detenido por Parada de Emergencia'
                         WHERE id = %s
                     """, (act_activa['id'],))
-                # Disparar alerta a Telegram
+                    await cur.execute("""
+                        UPDATE asignaciones_actuales 
+                        SET operario_id = NULL, herramienta_id = NULL, comentario = NULL 
+                        WHERE maquina_id = %s
+                    """, (maquina_id,))
                 await notificar_emergencia_http(maquina_nombre, causa)
 
         conn.close()
 
     except Exception as e:
-        logging.error(f"❌ Error al procesar evento MQTT: {e}")
+        logging.error(f"Error al procesar evento MQTT: {e}")
         logging.error(traceback.format_exc())
 
 async def main():
